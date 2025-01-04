@@ -28,6 +28,7 @@ private slots:
     void pageChanged(int page);
     void hideToolBar();
     void showToolBar();
+    void toggleDarkMode();
 
 private:
     QScrollArea *scrollArea;
@@ -39,6 +40,7 @@ private:
     QLabel *pageTotalLabel;
     QComboBox *zoomComboBox;
     QTimer *hideTimer;
+    bool isDarkMode;
     
     const QList<int> zoomLevels = {25, 50, 75, 100, 125, 150, 200, 300, 400};
     int currentZoomLevel = 100;
@@ -52,4 +54,5 @@ private:
     bool isImageFile(const QString &filePath);
     bool isPDFFile(const QString &filePath);
     void updateZoomLevel(int delta);
+    void updatePdfTheme();
 }; 

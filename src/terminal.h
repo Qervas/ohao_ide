@@ -9,14 +9,16 @@ class CommandLineEdit : public QLineEdit {
     Q_OBJECT
 public:
     explicit CommandLineEdit(QWidget *parent = nullptr);
+    void addToHistory(const QString &command);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    bool event(QEvent *e) override;
 
 signals:
     void tabPressed();
 
-private:
+public:
     QStringList history;
     int historyIndex;
 };
@@ -30,6 +32,7 @@ public:
 
 protected:
     void focusInEvent(QFocusEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onReadyReadStandardOutput();
@@ -46,6 +49,8 @@ private:
     QStringList commandHistory;
     QStringList fileCompletions;
     int historyIndex;
+    QString username;
+    QString hostname;
 
     void setupUI();
     void setupProcess();
@@ -55,4 +60,6 @@ private:
     QString getCurrentCommand() const;
     void showCompletions(const QStringList &completions);
     QString getShell();
+    void updatePrompt();
+    QString getColoredPrompt() const;
 }; 

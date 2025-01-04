@@ -7,6 +7,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# set debug on
+set(CMAKE_BUILD_TYPE Debug)
 find_package(Qt6 REQUIRED COMPONENTS 
     Core
     Widgets
@@ -14,6 +16,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     PrintSupport
     Pdf
     PdfWidgets
+    Network
 )
 
 # Create the executable with resources
@@ -35,4 +38,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::PrintSupport
     Qt6::Pdf
     Qt6::PdfWidgets
+    Qt6::Network
 )

@@ -11,7 +11,7 @@
 #include <QtPdf/QPdfDocument>
 #include <QtPdf/QPdfPageNavigator>
 
-FilePreview::FilePreview(QWidget *parent) : QWidget(parent) {
+FilePreview::FilePreview(QWidget *parent) : QWidget(parent), isDarkMode(false) {
     setupUI();
 }
 
@@ -19,6 +19,13 @@ void FilePreview::setupUI() {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+
+    // Initialize PDF components first
+    pdfDocument = new QPdfDocument(this);
+    pdfView = new QPdfView(this);
+    pdfView->setDocument(pdfDocument);
+    pdfView->setPageMode(QPdfView::PageMode::MultiPage);
+    pdfView->installEventFilter(this);
 
     // Setup PDF toolbar
     pdfToolBar = new QToolBar(this);
@@ -40,13 +47,6 @@ void FilePreview::setupUI() {
     imageLabel->setAlignment(Qt::AlignCenter);
     imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     scrollArea->setWidget(imageLabel);
-
-    // PDF view
-    pdfDocument = new QPdfDocument(this);
-    pdfView = new QPdfView(this);
-    pdfView->setDocument(pdfDocument);
-    pdfView->setPageMode(QPdfView::PageMode::MultiPage);
-    pdfView->installEventFilter(this);
     
     // Initialize hide timer for toolbar
     hideTimer = new QTimer(this);
@@ -56,6 +56,9 @@ void FilePreview::setupUI() {
 
     layout->addWidget(scrollArea);
     layout->addWidget(pdfView);
+
+    // Apply initial theme
+    updatePdfTheme();
 }
 
 void FilePreview::setupPdfControls() {
@@ -119,6 +122,13 @@ void FilePreview::setupPdfControls() {
             pdfView->setZoomMode(QPdfView::ZoomMode::Custom);
         }
     });
+
+    pdfToolBar->addSeparator();
+    
+    // Add dark mode toggle button
+    auto darkModeAction = pdfToolBar->addAction(QApplication::style()->standardIcon(QStyle::SP_DialogResetButton),
+                                              tr("Toggle Dark Mode"));
+    connect(darkModeAction, &QAction::triggered, this, &FilePreview::toggleDarkMode);
 }
 
 bool FilePreview::eventFilter(QObject *obj, QEvent *event) {
@@ -132,6 +142,12 @@ bool FilePreview::eventFilter(QObject *obj, QEvent *event) {
         } else if (event->type() == QEvent::MouseMove) {
             showToolBar();
             hideTimer->start();
+        } else if (event->type() == QEvent::KeyPress) {
+            QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->modifiers() & Qt::ControlModifier && keyEvent->key() == Qt::Key_D) {
+                toggleDarkMode();
+                return true;
+            }
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -230,6 +246,9 @@ void FilePreview::previewPDF(const QString &filePath) {
     
     // Set initial zoom mode to fit width
     pdfView->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+
+    // Apply current theme
+    updatePdfTheme();
 }
 
 void FilePreview::clearPreview() {
@@ -282,4 +301,61 @@ void FilePreview::showToolBar() {
 
 void FilePreview::hideToolBar() {
     pdfToolBar->hide();
+}
+
+void FilePreview::toggleDarkMode() {
+    isDarkMode = !isDarkMode;
+    updatePdfTheme();
+}
+
+void FilePreview::updatePdfTheme() {
+    if (!pdfView) {
+        return;
+    }
+
+    if (isDarkMode) {
+        // Dark mode colors
+        QPalette darkPalette;
+        darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::WindowText, Qt::white);
+        darkPalette.setColor(QPalette::Base, QColor(25, 25, 25));
+        darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::Text, Qt::white);
+        darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::ButtonText, Qt::white);
+        
+        pdfView->setPalette(darkPalette);
+        pdfView->setStyleSheet(
+            "QPdfView {"
+            "   background-color: #232323;"
+            "   color: #ffffff;"
+            "}"
+            "QPdfView::page {"
+            "   background-color: #232323;"
+            "   border: 1px solid #404040;"
+            "}"
+        );
+    } else {
+        // Light mode colors
+        QPalette lightPalette;
+        lightPalette.setColor(QPalette::Window, Qt::white);
+        lightPalette.setColor(QPalette::WindowText, Qt::black);
+        lightPalette.setColor(QPalette::Base, Qt::white);
+        lightPalette.setColor(QPalette::AlternateBase, QColor(245, 245, 245));
+        lightPalette.setColor(QPalette::Text, Qt::black);
+        lightPalette.setColor(QPalette::Button, Qt::white);
+        lightPalette.setColor(QPalette::ButtonText, Qt::black);
+        
+        pdfView->setPalette(lightPalette);
+        pdfView->setStyleSheet(
+            "QPdfView {"
+            "   background-color: #ffffff;"
+            "   color: #000000;"
+            "}"
+            "QPdfView::page {"
+            "   background-color: #ffffff;"
+            "   border: 1px solid #e0e0e0;"
+            "}"
+        );
+    }
 } 
