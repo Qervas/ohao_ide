@@ -1,0 +1,248 @@
+/* Main Window */
+QMainWindow {
+    background-color: #1E1E1E;
+    color: #D4D4D4;
+}
+
+/* Menu Bar */
+QMenuBar {
+    background-color: #252526;
+    color: #D4D4D4;
+    border-bottom: 1px solid #3D3D3D;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 4px 8px;
+}
+
+QMenuBar::item:selected {
+    background-color: #094771;
+}
+
+QMenu {
+    background-color: #252526;
+    border: 1px solid #454545;
+}
+
+QMenu::item {
+    padding: 5px 20px;
+    color: #D4D4D4;
+}
+
+QMenu::item:selected {
+    background-color: #094771;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #3D3D3D;
+    margin: 4px 0px;
+}
+
+/* Status Bar */
+QStatusBar {
+    background-color: #007ACC;
+    color: #FFFFFF;
+}
+
+/* Splitter */
+QSplitter::handle {
+    background-color: #3D3D3D;
+}
+
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+/* Scroll Bar */
+QScrollBar:vertical {
+    background-color: #1E1E1E;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #424242;
+    min-height: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #686868;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background-color: #1E1E1E;
+    height: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #424242;
+    min-width: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #686868;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* Tab Widget */
+QTabWidget::pane {
+    border: none;
+}
+
+QTabBar::tab {
+    background-color: #2D2D2D;
+    color: #969696;
+    padding: 8px 16px;
+    border: none;
+}
+
+QTabBar::tab:selected {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #383838;
+}
+
+QTabBar::close-button {
+    image: url(:/icons/close.png);
+}
+
+QTabBar::close-button:hover {
+    image: url(:/icons/close-hover.png);
+}
+
+/* Line Edit */
+QLineEdit {
+    background-color: #3C3C3C;
+    color: #D4D4D4;
+    border: 1px solid #3D3D3D;
+    padding: 4px;
+    selection-background-color: #094771;
+}
+
+/* Push Button */
+QPushButton {
+    background-color: #0E639C;
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 2px;
+}
+
+QPushButton:hover {
+    background-color: #1177BB;
+}
+
+QPushButton:pressed {
+    background-color: #0D5789;
+}
+
+QPushButton:disabled {
+    background-color: #3C3C3C;
+    color: #787878;
+}
+
+/* Tool Button */
+QToolButton {
+    background-color: transparent;
+    border: none;
+    padding: 4px;
+}
+
+QToolButton:hover {
+    background-color: #3D3D3D;
+}
+
+QToolButton:pressed {
+    background-color: #094771;
+}
+
+/* Dock Widget */
+QDockWidget {
+    titlebar-close-icon: url(:/icons/close.png);
+    titlebar-normal-icon: url(:/icons/restore.png);
+}
+
+QDockWidget::title {
+    background-color: #252526;
+    color: #D4D4D4;
+    padding: 6px;
+}
+
+/* Tree View */
+QTreeView {
+    background-color: #252526;
+    border: none;
+}
+
+QTreeView::item {
+    padding: 2px;
+    color: #D4D4D4;
+}
+
+QTreeView::item:hover {
+    background-color: #2A2D2E;
+}
+
+QTreeView::item:selected {
+    background-color: #094771;
+    color: #FFFFFF;
+}
+
+QTreeView::branch {
+    background-color: #252526;
+}
+
+QTreeView::branch:has-siblings:!adjoins-item {
+    border-image: url(:/icons/vline.png) 0;
+}
+
+QTreeView::branch:has-siblings:adjoins-item {
+    border-image: url(:/icons/branch-more.png) 0;
+}
+
+QTreeView::branch:!has-children:!has-siblings:adjoins-item {
+    border-image: url(:/icons/branch-end.png) 0;
+}
+
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:closed:has-children:has-siblings {
+    border-image: none;
+    image: url(:/icons/branch-closed.png);
+}
+
+QTreeView::branch:open:has-children:!has-siblings,
+QTreeView::branch:open:has-children:has-siblings {
+    border-image: none;
+    image: url(:/icons/branch-open.png);
+}
+
+/* Tool Tip */
+QToolTip {
+    background-color: #252526;
+    color: #D4D4D4;
+    border: 1px solid #3D3D3D;
+    padding: 4px;
+} 

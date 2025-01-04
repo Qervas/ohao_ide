@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>resources/styles/dark.qss</file>
+        <file>resources/icons/close.png</file>
+        <file>resources/icons/close-hover.png</file>
+        <file>resources/icons/restore.png</file>
+        <file>resources/icons/vline.png</file>
+        <file>resources/icons/branch-more.png</file>
+        <file>resources/icons/branch-end.png</file>
+        <file>resources/icons/branch-closed.png</file>
+        <file>resources/icons/branch-open.png</file>
+    </qresource>
+</RCC> 

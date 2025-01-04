@@ -1,0 +1,58 @@
+#pragma once
+#include <QWidget>
+#include <QProcess>
+#include <QPlainTextEdit>
+#include <QLineEdit>
+#include <QStringList>
+
+class CommandLineEdit : public QLineEdit {
+    Q_OBJECT
+public:
+    explicit CommandLineEdit(QWidget *parent = nullptr);
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
+signals:
+    void tabPressed();
+
+private:
+    QStringList history;
+    int historyIndex;
+};
+
+class Terminal : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit Terminal(QWidget *parent = nullptr);
+    void setWorkingDirectory(const QString &path);
+
+protected:
+    void focusInEvent(QFocusEvent *event) override;
+
+private slots:
+    void onReadyReadStandardOutput();
+    void onReadyReadStandardError();
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void handleReturnPressed();
+    void handleTabCompletion();
+
+private:
+    QProcess *process;
+    QPlainTextEdit *outputDisplay;
+    CommandLineEdit *commandInput;
+    QString currentWorkingDirectory;
+    QStringList commandHistory;
+    QStringList fileCompletions;
+    int historyIndex;
+
+    void setupUI();
+    void setupProcess();
+    void executeCommand(const QString &command);
+    void appendOutput(const QString &text, const QColor &color = QColor("#D4D4D4"));
+    QStringList getCompletions(const QString &prefix);
+    QString getCurrentCommand() const;
+    void showCompletions(const QStringList &completions);
+    QString getShell();
+}; 
