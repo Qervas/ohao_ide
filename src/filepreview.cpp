@@ -4,6 +4,12 @@
 #include <QFileInfo>
 #include <QMimeDatabase>
 #include <QDir>
+#include <QWheelEvent>
+#include <QToolButton>
+#include <QApplication>
+#include <QStyle>
+#include <QtPdf/QPdfDocument>
+#include <QtPdf/QPdfPageNavigator>
 
 FilePreview::FilePreview(QWidget *parent) : QWidget(parent) {
     setupUI();
@@ -12,6 +18,16 @@ FilePreview::FilePreview(QWidget *parent) : QWidget(parent) {
 void FilePreview::setupUI() {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    // Setup PDF toolbar
+    pdfToolBar = new QToolBar(this);
+    pdfToolBar->setFloatable(false);
+    pdfToolBar->setMovable(false);
+    pdfToolBar->setIconSize(QSize(16, 16));
+    setupPdfControls();
+    pdfToolBar->hide();
+    layout->addWidget(pdfToolBar);
 
     // Scroll area for images
     scrollArea = new QScrollArea(this);
@@ -29,12 +45,106 @@ void FilePreview::setupUI() {
     pdfDocument = new QPdfDocument(this);
     pdfView = new QPdfView(this);
     pdfView->setDocument(pdfDocument);
-    pdfView->setPageMode(QPdfView::PageMode::SinglePage);
-    pdfView->setZoomMode(QPdfView::ZoomMode::FitInView);
-    pdfView->hide();
+    pdfView->setPageMode(QPdfView::PageMode::MultiPage);
+    pdfView->installEventFilter(this);
+    
+    // Initialize hide timer for toolbar
+    hideTimer = new QTimer(this);
+    hideTimer->setSingleShot(true);
+    hideTimer->setInterval(2000);
+    connect(hideTimer, &QTimer::timeout, this, &FilePreview::hideToolBar);
 
     layout->addWidget(scrollArea);
     layout->addWidget(pdfView);
+}
+
+void FilePreview::setupPdfControls() {
+    // Navigation buttons
+    auto prevButton = pdfToolBar->addAction(QApplication::style()->standardIcon(QStyle::SP_MediaSkipBackward),
+                                          tr("Previous Page"));
+    auto nextButton = pdfToolBar->addAction(QApplication::style()->standardIcon(QStyle::SP_MediaSkipForward),
+                                          tr("Next Page"));
+    
+    // Page navigation
+    pageSpinBox = new QSpinBox(this);
+    pageSpinBox->setMinimum(1);
+    pageTotalLabel = new QLabel(this);
+    pdfToolBar->addWidget(pageSpinBox);
+    pdfToolBar->addWidget(pageTotalLabel);
+    
+    pdfToolBar->addSeparator();
+    
+    // Zoom controls
+    auto zoomOutAction = pdfToolBar->addAction(QApplication::style()->standardIcon(QStyle::SP_MediaVolumeMuted),
+                                             tr("Zoom Out"));
+    
+    zoomComboBox = new QComboBox(this);
+    for (int zoom : zoomLevels) {
+        zoomComboBox->addItem(QString("%1%").arg(zoom), zoom);
+    }
+    zoomComboBox->setCurrentText("100%");
+    zoomComboBox->setEditable(true);
+    pdfToolBar->addWidget(zoomComboBox);
+    
+    auto zoomInAction = pdfToolBar->addAction(QApplication::style()->standardIcon(QStyle::SP_MediaVolume),
+                                            tr("Zoom In"));
+
+    // Connect signals
+    connect(prevButton, &QAction::triggered, [this]() {
+        if (pageSpinBox->value() > 1) {
+            pageSpinBox->setValue(pageSpinBox->value() - 1);
+        }
+    });
+    
+    connect(nextButton, &QAction::triggered, [this]() {
+        if (pageSpinBox->value() < pageSpinBox->maximum()) {
+            pageSpinBox->setValue(pageSpinBox->value() + 1);
+        }
+    });
+    
+    connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &FilePreview::pageChanged);
+    
+    connect(zoomOutAction, &QAction::triggered, this, &FilePreview::zoomOut);
+    connect(zoomInAction, &QAction::triggered, this, &FilePreview::zoomIn);
+    
+    connect(zoomComboBox, &QComboBox::currentTextChanged, [this](const QString &text) {
+        QString numStr = text;
+        numStr.remove('%');
+        bool ok;
+        int zoom = numStr.toInt(&ok);
+        if (ok && zoom >= 25 && zoom <= 400) {
+            currentZoomLevel = zoom;
+            pdfView->setZoomFactor(zoom / 100.0);
+            pdfView->setZoomMode(QPdfView::ZoomMode::Custom);
+        }
+    });
+}
+
+bool FilePreview::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == pdfView) {
+        if (event->type() == QEvent::Wheel) {
+            QWheelEvent *wheelEvent = static_cast<QWheelEvent*>(event);
+            if (QApplication::keyboardModifiers() & Qt::ControlModifier) {
+                updateZoomLevel(wheelEvent->angleDelta().y());
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove) {
+            showToolBar();
+            hideTimer->start();
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+void FilePreview::updateZoomLevel(int delta) {
+    int index = zoomLevels.indexOf(currentZoomLevel);
+    if (delta > 0 && index < zoomLevels.size() - 1) {
+        currentZoomLevel = zoomLevels[index + 1];
+    } else if (delta < 0 && index > 0) {
+        currentZoomLevel = zoomLevels[index - 1];
+    }
+    zoomComboBox->setCurrentText(QString("%1%").arg(currentZoomLevel));
 }
 
 void FilePreview::previewFile(const QString &filePath) {
@@ -97,18 +207,29 @@ void FilePreview::resizeEvent(QResizeEvent *event) {
 }
 
 void FilePreview::previewPDF(const QString &filePath) {
-    // Show PDF preview
     scrollArea->hide();
     pdfView->show();
+    pdfToolBar->show();
 
-    // Load PDF document
     pdfDocument->load(filePath);
     if (pdfDocument->status() == QPdfDocument::Status::Error) {
         imageLabel->setText(tr("Cannot load PDF %1").arg(filePath));
         scrollArea->show();
         pdfView->hide();
+        pdfToolBar->hide();
         return;
     }
+
+    // Update page navigation controls
+    pageSpinBox->setMaximum(pdfDocument->pageCount());
+    pageSpinBox->setValue(1);
+    pageTotalLabel->setText(tr(" of %1").arg(pdfDocument->pageCount()));
+    
+    // Reset zoom level
+    resetZoom();
+    
+    // Set initial zoom mode to fit width
+    pdfView->setZoomMode(QPdfView::ZoomMode::FitToWidth);
 }
 
 void FilePreview::clearPreview() {
@@ -126,4 +247,39 @@ bool FilePreview::isPDFFile(const QString &filePath) {
     QMimeDatabase db;
     QString mimeType = db.mimeTypeForFile(filePath).name();
     return mimeType == "application/pdf";
+}
+
+void FilePreview::zoomIn() {
+    int index = zoomLevels.indexOf(currentZoomLevel);
+    if (index < zoomLevels.size() - 1) {
+        currentZoomLevel = zoomLevels[index + 1];
+        zoomComboBox->setCurrentText(QString("%1%").arg(currentZoomLevel));
+    }
+}
+
+void FilePreview::zoomOut() {
+    int index = zoomLevels.indexOf(currentZoomLevel);
+    if (index > 0) {
+        currentZoomLevel = zoomLevels[index - 1];
+        zoomComboBox->setCurrentText(QString("%1%").arg(currentZoomLevel));
+    }
+}
+
+void FilePreview::resetZoom() {
+    currentZoomLevel = 100;
+    zoomComboBox->setCurrentText("100%");
+}
+
+void FilePreview::pageChanged(int page) {
+    if (pdfView && pdfView->pageNavigator()) {
+        pdfView->pageNavigator()->jump(page - 1, QPoint(0, 0));
+    }
+}
+
+void FilePreview::showToolBar() {
+    pdfToolBar->show();
+}
+
+void FilePreview::hideToolBar() {
+    pdfToolBar->hide();
 } 
