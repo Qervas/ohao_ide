@@ -9,6 +9,16 @@ set(CMAKE_AUTOUIC ON)
 
 # set debug on
 set(CMAKE_BUILD_TYPE Debug)
+
+# Include GNUInstallDirs for standard installation directories
+include(GNUInstallDirs)
+
+# Make CUPS optional
+find_package(Cups)
+if(CUPS_FOUND)
+    add_definitions(-DWITH_CUPS)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS 
     Core
     Widgets
@@ -39,4 +49,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Pdf
     Qt6::PdfWidgets
     Qt6::Network
+)
+
+# Installation rules with proper destinations
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Install documentation files
+install(FILES 
+    LICENSE 
+    README.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
 )
