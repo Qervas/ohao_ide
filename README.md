@@ -2,7 +2,7 @@
 
 A lightweight IDE with PDF/picture preview support.
 
-![1736054770985](image/README/1736054770985.png)
+![1736059675542](image/README/1736059675542.png)
 
 ## Features
 

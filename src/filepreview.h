@@ -1,59 +1,67 @@
 #pragma once
+
 #include <QWidget>
-#include <QLabel>
-#include <QScrollArea>
 #include <QPdfDocument>
 #include <QPdfView>
-#include <QResizeEvent>
+#include <QLabel>
+#include <QStackedWidget>
 #include <QToolBar>
 #include <QSpinBox>
 #include <QComboBox>
-#include <QTimer>
+#include <QLineEdit>
+#include <QPdfBookmarkModel>
+#include <QTreeView>
+#include <QSplitter>
+#include <QPdfSearchModel>
+#include <QPdfPageNavigator>
+#include <QAbstractItemModel>
 
 class FilePreview : public QWidget {
     Q_OBJECT
-
 public:
     explicit FilePreview(QWidget *parent = nullptr);
-    void previewFile(const QString &filePath);
+    ~FilePreview();
+    void cleanup();
     void loadFile(const QString &filePath);
 
-protected:
-    void resizeEvent(QResizeEvent *event) override;
-    bool eventFilter(QObject *obj, QEvent *event) override;
-
 private slots:
-    void zoomIn();
-    void zoomOut();
-    void resetZoom();
-    void pageChanged(int page);
-    void hideToolBar();
-    void showToolBar();
-    void toggleDarkMode();
+    void handlePageChange(int page);
+    void handleZoomChange(int zoom);
+    void handleSearch();
+    void handleSearchNext();
+    void handleSearchPrev();
+    void handleBookmarkClicked(const QModelIndex &index);
+    void updatePageInfo();
 
 private:
-    QScrollArea *scrollArea;
-    QLabel *imageLabel;
+    // Core widgets
+    QSplitter *mainSplitter;
+    QStackedWidget *stack;
+
+    // PDF components
+    QPdfDocument *pdfDoc;
     QPdfView *pdfView;
-    QPdfDocument *pdfDocument;
-    QToolBar *pdfToolBar;
+    QPdfBookmarkModel *bookmarkModel;
+    QTreeView *bookmarkView;
+    QPdfSearchModel *searchModel;
+
+    // Image components
+    QLabel *imageLabel;
+
+    // Toolbar and controls
+    QToolBar *toolbar;
     QSpinBox *pageSpinBox;
     QLabel *pageTotalLabel;
-    QComboBox *zoomComboBox;
-    QTimer *hideTimer;
-    bool isDarkMode;
-    
-    const QList<int> zoomLevels = {25, 50, 75, 100, 125, 150, 200, 300, 400};
-    int currentZoomLevel = 100;
+    QComboBox *zoomCombo;
+    QLineEdit *searchEdit;
+
+    // Current state
+    QString currentSearchText;
+    int currentSearchPage;
 
     void setupUI();
-    void setupPdfControls();
-    void previewImage(const QString &filePath);
-    void previewPDF(const QString &filePath);
-    void clearPreview();
-    void updateImageDisplay(const QImage &image);
-    bool isImageFile(const QString &filePath);
-    bool isPDFFile(const QString &filePath);
-    void updateZoomLevel(int delta);
-    void updatePdfTheme();
-}; 
+    void setupPDFTools();
+    void loadPDF(const QString &filePath);
+    void loadImage(const QString &filePath);
+    void searchDocument(bool forward = true);
+};

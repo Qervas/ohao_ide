@@ -1,39 +1,31 @@
 #include <QApplication>
 #include <QDir>
+#include <QFileInfo>
+#include <QSettings>
 #include "mainwindow.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+    
+    // Set application information for QSettings
+    QApplication::setOrganizationName("ohao");
+    QApplication::setApplicationName("ohao_IDE");
+    
     MainWindow window;
-
-    // Get initial directory
-    QString initialPath;
+    window.show();
+    
+    // If command line argument is provided, open that folder
     if (argc > 1) {
-        // Use the first argument as path
-        initialPath = QString::fromLocal8Bit(argv[1]);
-        
-        // Handle relative paths
-        if (initialPath == ".") {
-            initialPath = QDir::currentPath();
-        } else if (initialPath == "..") {
-            initialPath = QDir::currentPath();
-            initialPath = QFileInfo(initialPath).dir().absolutePath();
-        } else {
-            QFileInfo fileInfo(initialPath);
-            if (fileInfo.exists()) {
-                initialPath = fileInfo.absoluteFilePath();
-            } else {
-                initialPath = QDir::homePath();
+        QString path = QString::fromLocal8Bit(argv[1]);
+        QFileInfo fileInfo(path);
+        if (fileInfo.exists()) {
+            if (fileInfo.isDir()) {
+                window.setInitialDirectory(path);
+            } else if (fileInfo.isFile()) {
+                window.loadFile(path);
             }
         }
-    } else {
-        // No arguments, use home directory
-        initialPath = QDir::homePath();
     }
-
-    // Set the initial directory
-    window.setInitialDirectory(initialPath);
-    window.show();
-
+    
     return app.exec();
 } 

@@ -10,6 +10,10 @@ set(CMAKE_AUTOUIC ON)
 # set debug on
 set(CMAKE_BUILD_TYPE Debug)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+
+
 # Include GNUInstallDirs for standard installation directories
 include(GNUInstallDirs)
 
@@ -27,17 +31,19 @@ find_package(Qt6 REQUIRED COMPONENTS
     Pdf
     PdfWidgets
     Network
+	WebEngineWidgets
 )
 
-# Create the executable with resources
+# Gather all source files
+file(GLOB_RECURSE SOURCES 
+    src/*.cpp
+    src/*.h
+    src/*.hpp
+)
+
+# Create the executable with all source files
 add_executable(${PROJECT_NAME}
-    src/main.cpp
-    src/mainwindow.cpp
-    src/codeeditor.cpp
-    src/projecttree.cpp
-    src/filepreview.cpp
-    src/terminal.cpp
-    src/cpphighlighter.cpp
+    ${SOURCES}
     resources.qrc
 )
 
@@ -49,6 +55,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Pdf
     Qt6::PdfWidgets
     Qt6::Network
+	Qt6::WebEngineWidgets 
 )
 
 # Installation rules with proper destinations
