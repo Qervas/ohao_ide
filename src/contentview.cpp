@@ -1,4 +1,5 @@
 #include "contentview.h"
+#include "browserview.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -61,34 +62,33 @@ void ContentView::loadFile(const QString &filePath) {
 
 
 void ContentView::loadWebContent(const QString &url) {
-    // Check if URL is already open
-    if (QWidget *existing = findTabByPath(url)) {
-        tabs->setCurrentWidget(existing);
-        return;
-    }
+    // Create new browser view
+    BrowserView *browser = new BrowserView(this);
+    browser->setProperty("filePath", url);
 
-    // Create new web view
-    QWebEngineView *webView = new QWebEngineView(this);
-    webView->setUrl(QUrl(url));
-    webView->setProperty("filePath", url);
-
-    // Add to tabs with a generic name initially
-    int index = tabs->addTab(webView, "Loading...");
+    // Add to tabs
+    int index = tabs->addTab(browser, "New Tab");
     tabs->setCurrentIndex(index);
 
-    // Update tab title when page is loaded
-    connect(webView, &QWebEngineView::titleChanged, this, [this, webView](const QString &title) {
-        int index = tabs->indexOf(webView);
+    // Load URL and update tab when title changes
+    browser->loadUrl(url);
+
+    // Connect signals
+    connect(browser, &BrowserView::titleChanged,
+            this, [this, browser](const QString &title) {
+        int index = tabs->indexOf(browser);
         if (index != -1) {
-            // Truncate title if it's too long
             QString displayTitle = title;
             if (displayTitle.length() > 20) {
                 displayTitle = displayTitle.left(17) + "...";
             }
             tabs->setTabText(index, displayTitle);
-            tabs->setTabToolTip(index, title); // Show full title on hover
+            tabs->setTabToolTip(index, title);
         }
     });
+
+    // Connect new tab signal
+    connect(browser, &BrowserView::createTab, this, &ContentView::handleNewTab);
 }
 
 bool ContentView::isWebContent(const QString &path) const {
@@ -118,4 +118,8 @@ QWidget* ContentView::findTabByPath(const QString &path) {
         }
     }
     return nullptr;
+}
+
+void ContentView::handleNewTab(const QUrl &url) {
+    loadWebContent(url.toString());
 }

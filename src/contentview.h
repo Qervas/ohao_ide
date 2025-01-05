@@ -16,6 +16,9 @@ public:
 protected:
     void resizeEvent(QResizeEvent *event) override;
 
+private slots:
+    void handleNewTab(const QUrl &url);
+
 private:
     enum class ViewMode {
         Empty,
