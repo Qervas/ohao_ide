@@ -16,6 +16,7 @@ class FilePreview : public QWidget {
 public:
     explicit FilePreview(QWidget *parent = nullptr);
     void previewFile(const QString &filePath);
+    void loadFile(const QString &filePath);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

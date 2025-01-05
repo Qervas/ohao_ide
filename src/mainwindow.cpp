@@ -1,29 +1,30 @@
 #include "mainwindow.h"
-#include <QSplitter>
 #include <QVBoxLayout>
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QTextStream>
+#include <QSettings>
+#include <QCloseEvent>
+#include <QApplication>
+#include <QScreen>
+#include <QSplitter>
+#include <QFileInfo>
 #include <QDir>
-#include <QMimeDatabase>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
+{
     setupUI();
     createMenus();
-    createActions();
-    
-    // Set initial directory to home
-    QString homePath = QDir::homePath();
-    projectTree->setRootPath(homePath);
-    terminal->setWorkingDirectory(homePath);
-    
-    setWindowTitle("Modern C++ IDE");
+    createStatusBar();
+    loadSettings();
+
+    setWindowTitle(tr("Modern C++ IDE"));
 }
 
-void MainWindow::setupUI() {
-    // Main splitter
+void MainWindow::setupUI()
+{
+    // Create main splitter
     QSplitter *mainSplitter = new QSplitter(Qt::Horizontal);
     
     // Left side - Project Tree
@@ -54,315 +55,363 @@ void MainWindow::setupUI() {
     mainSplitter->addWidget(rightSplitter);
     
     // Set initial splitter sizes
-    QList<int> mainSizes;
-    mainSizes << 200 << 800;  // Project tree: 200px, Rest: 800px
-    mainSplitter->setSizes(mainSizes);
-    
-    QList<int> rightSizes;
-    rightSizes << 600 << 200;  // Editor: 600px, Preview/Terminal: 200px
-    rightSplitter->setSizes(rightSizes);
-    
-    QList<int> verticalSizes;
-    verticalSizes << 200 << 200;  // Preview: 200px, Terminal: 200px
-    rightVerticalSplitter->setSizes(verticalSizes);
+    mainSplitter->setStretchFactor(0, 1);  // Project tree
+    mainSplitter->setStretchFactor(1, 4);  // Right side
+    rightSplitter->setStretchFactor(0, 3); // Editor
+    rightSplitter->setStretchFactor(1, 1); // Preview/Terminal
     
     setCentralWidget(mainSplitter);
 
-    // Connect project tree signals
-    connect(projectTree, &ProjectTree::directoryChanged,
-            this, &MainWindow::onDirectoryChanged);
-    connect(projectTree, &ProjectTree::fileSelected,
-            this, &MainWindow::onFileSelected);
-            
-    // Set minimum sizes
-    projectTree->setMinimumWidth(100);
-    editorTabs->setMinimumWidth(300);
-    rightVerticalSplitter->setMinimumWidth(200);
-    filePreview->setMinimumHeight(100);
-    terminal->setMinimumHeight(100);
-    
-    // Set stretch factors
-    mainSplitter->setStretchFactor(0, 0);  // Project tree doesn't stretch
-    mainSplitter->setStretchFactor(1, 1);  // Right side stretches
-    rightSplitter->setStretchFactor(0, 1);  // Editor stretches
-    rightSplitter->setStretchFactor(1, 0);  // Preview/Terminal doesn't stretch
-    
-    // Set initial window size
-    resize(1200, 800);
+    // Connect signals
+    connect(editorTabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
+    connect(projectTree, &ProjectTree::fileSelected, this, &MainWindow::handleFileSelected);
+    connect(projectTree, &ProjectTree::directoryChanged, this, &MainWindow::handleDirectoryChanged);
+    connect(projectTree, &ProjectTree::rootDirectoryChanged, this, &MainWindow::handleRootDirectoryChanged);
 }
 
-void MainWindow::createMenus() {
+void MainWindow::createMenus()
+{
     QMenuBar *menuBar = this->menuBar();
     
     // File menu
     QMenu *fileMenu = menuBar->addMenu(tr("&File"));
-    fileMenu->addAction(tr("&New"), QKeySequence::New, this, &MainWindow::createNewFile);
-    fileMenu->addAction(tr("&Open"), QKeySequence::Open, this, &MainWindow::openFile);
-    fileMenu->addAction(tr("Open &Folder..."), tr("Ctrl+K, Ctrl+O"), this, &MainWindow::openFolder);
-    fileMenu->addAction(tr("&Save"), QKeySequence::Save, this, &MainWindow::saveFile);
-    fileMenu->addAction(tr("Save &As"), QKeySequence::SaveAs, this, &MainWindow::saveFileAs);
+    QAction *newAction = fileMenu->addAction(tr("&New File"));
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, &MainWindow::createNewFile);
+
+    QAction *openAction = fileMenu->addAction(tr("&Open File..."));
+    openAction->setShortcut(QKeySequence::Open);
+    connect(openAction, &QAction::triggered, this, &MainWindow::openFile);
+
+    QAction *openFolderAction = fileMenu->addAction(tr("Open &Folder..."));
+    openFolderAction->setShortcut(QKeySequence("Ctrl+K, Ctrl+O"));
+    connect(openFolderAction, &QAction::triggered, this, &MainWindow::openFolder);
+
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("E&xit"), QKeySequence::Quit, this, &QWidget::close);
+
+    QAction *saveAction = fileMenu->addAction(tr("&Save"));
+    saveAction->setShortcut(QKeySequence::Save);
+    connect(saveAction, &QAction::triggered, this, [this]() {
+        saveFile();
+    });
+
+    QAction *saveAsAction = fileMenu->addAction(tr("Save &As..."));
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    connect(saveAsAction, &QAction::triggered, this, [this]() {
+        saveFileAs();
+    });
+
+    fileMenu->addSeparator();
+
+    QAction *exitAction = fileMenu->addAction(tr("E&xit"));
+    exitAction->setShortcut(QKeySequence::Quit);
+    connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
     // Edit menu
     QMenu *editMenu = menuBar->addMenu(tr("&Edit"));
-    editMenu->addAction(tr("&Undo"), QKeySequence::Undo, this, &MainWindow::undo);
-    editMenu->addAction(tr("&Redo"), QKeySequence::Redo, this, &MainWindow::redo);
+    QAction *undoAction = editMenu->addAction(tr("&Undo"));
+    undoAction->setShortcut(QKeySequence::Undo);
+    connect(undoAction, &QAction::triggered, this, &MainWindow::undo);
+
+    QAction *redoAction = editMenu->addAction(tr("&Redo"));
+    redoAction->setShortcut(QKeySequence::Redo);
+    connect(redoAction, &QAction::triggered, this, &MainWindow::redo);
+
     editMenu->addSeparator();
-    editMenu->addAction(tr("Cu&t"), QKeySequence::Cut, this, &MainWindow::cut);
-    editMenu->addAction(tr("&Copy"), QKeySequence::Copy, this, &MainWindow::copy);
-    editMenu->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);
+
+    QAction *cutAction = editMenu->addAction(tr("Cu&t"));
+    cutAction->setShortcut(QKeySequence::Cut);
+    connect(cutAction, &QAction::triggered, this, &MainWindow::cut);
+
+    QAction *copyAction = editMenu->addAction(tr("&Copy"));
+    copyAction->setShortcut(QKeySequence::Copy);
+    connect(copyAction, &QAction::triggered, this, &MainWindow::copy);
+
+    QAction *pasteAction = editMenu->addAction(tr("&Paste"));
+    pasteAction->setShortcut(QKeySequence::Paste);
+    connect(pasteAction, &QAction::triggered, this, &MainWindow::paste);
+
+    // Help menu
+    QMenu *helpMenu = menuBar->addMenu(tr("&Help"));
+    helpMenu->addAction(tr("&About"), this, &MainWindow::about);
 }
 
-void MainWindow::createActions() {
-    // Add actions for file operations
-    connect(editorTabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
+void MainWindow::createStatusBar()
+{
+    statusBar()->showMessage(tr("Ready"));
 }
 
-// Add these slot implementations
-void MainWindow::createNewFile() {
-    CodeEditor *editor = new CodeEditor(this);
-    editorTabs->addTab(editor, tr("Untitled"));
+void MainWindow::loadSettings()
+{
+    QSettings settings;
+    
+    // Restore window geometry
+    const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
+    if (geometry.isEmpty()) {
+        const QRect availableGeometry = screen()->availableGeometry();
+        resize(availableGeometry.width() * 3 / 4, availableGeometry.height() * 3 / 4);
+        move((availableGeometry.width() - width()) / 2,
+             (availableGeometry.height() - height()) / 2);
+    } else {
+        restoreGeometry(geometry);
+    }
+    
+    // Restore last opened project
+    QString lastProject = settings.value("lastProject").toString();
+    if (!lastProject.isEmpty() && QDir(lastProject).exists()) {
+        setInitialDirectory(lastProject);
+    }
 }
 
-void MainWindow::openFile() {
-    QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open File"), "",
-        tr("C++ Files (*.cpp *.h *.hpp);;All Files (*)"));
+void MainWindow::saveSettings()
+{
+    QSettings settings;
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("lastProject", projectPath);
+}
 
-    if (fileName.isEmpty())
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (maybeSave()) {
+        saveSettings();
+        event->accept();
+    } else {
+        event->ignore();
+    }
+}
+
+bool MainWindow::maybeSave()
+{
+    CodeEditor *editor = currentEditor();
+    if (!editor || !editor->document()->isModified())
+        return true;
+
+    const QMessageBox::StandardButton ret
+        = QMessageBox::warning(this, tr("Application"),
+                             tr("The document has been modified.\n"
+                                "Do you want to save your changes?"),
+                             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    switch (ret) {
+    case QMessageBox::Save:
+        return saveFile();
+    case QMessageBox::Cancel:
+        return false;
+    default:
+        break;
+    }
+    return true;
+}
+
+void MainWindow::setInitialDirectory(const QString &path)
+{
+    if (path.isEmpty() || !QDir(path).exists())
         return;
 
-    QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"),
-            tr("Cannot open file %1:\n%2.")
-            .arg(fileName)
-            .arg(file.errorString()));
+    projectPath = path;
+    projectTree->setRootPath(path);
+    terminal->setWorkingDirectory(path);
+    updateWindowTitle();
+}
+
+void MainWindow::handleFileSelected(const QString &filePath)
+{
+    loadFile(filePath);
+}
+
+void MainWindow::handleDirectoryChanged(const QString &path)
+{
+    terminal->setWorkingDirectory(path);
+}
+
+void MainWindow::handleRootDirectoryChanged(const QString &path)
+{
+    projectPath = path;
+    updateWindowTitle();
+}
+
+void MainWindow::updateWindowTitle()
+{
+    QString title = tr("Modern C++ IDE");
+    if (!projectPath.isEmpty()) {
+        QFileInfo info(projectPath);
+        title = tr("%1 - %2").arg(info.fileName(), title);
+    }
+    setWindowTitle(title);
+}
+
+CodeEditor* MainWindow::currentEditor()
+{
+    return qobject_cast<CodeEditor*>(editorTabs->currentWidget());
+}
+
+QString MainWindow::currentFilePath()
+{
+    if (CodeEditor *editor = currentEditor()) {
+        return editor->property("filePath").toString();
+    }
+    return QString();
+}
+
+void MainWindow::createNewFile()
+{
+    CodeEditor *editor = new CodeEditor(this);
+    int index = editorTabs->addTab(editor, tr("untitled"));
+    editorTabs->setCurrentIndex(index);
+}
+
+void MainWindow::openFile()
+{
+    QString fileName = QFileDialog::getOpenFileName(this);
+    if (!fileName.isEmpty())
+        loadFile(fileName);
+}
+
+void MainWindow::openFolder()
+{
+    projectTree->openFolder();
+}
+
+void MainWindow::loadFile(const QString &filePath)
+{
+    QFileInfo fileInfo(filePath);
+    
+    // Check if file is already open
+    for (int i = 0; i < editorTabs->count(); ++i) {
+        if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
+            if (editor->property("filePath").toString() == filePath) {
+                editorTabs->setCurrentIndex(i);
+                return;
+            }
+        }
+    }
+    
+    // Check if it's a previewable file
+    QRegularExpression previewableFiles("^(jpg|jpeg|png|gif|bmp|pdf)$");
+    if (previewableFiles.match(fileInfo.suffix().toLower()).hasMatch()) {
+        filePreview->loadFile(filePath);
+        return;
+    }
+    
+    // Load as text file
+    QFile file(filePath);
+    if (!file.open(QFile::ReadOnly | QFile::Text)) {
+        QMessageBox::warning(this, tr("Application"),
+                           tr("Cannot read file %1:\n%2.")
+                           .arg(QDir::toNativeSeparators(filePath), file.errorString()));
         return;
     }
 
     QTextStream in(&file);
     CodeEditor *editor = new CodeEditor(this);
     editor->setPlainText(in.readAll());
+    editor->setProperty("filePath", filePath);
     
-    // Get the file name without path for the tab
-    QFileInfo fileInfo(fileName);
-    editor->setProperty("filePath", fileName);  // Store path as property
     int index = editorTabs->addTab(editor, fileInfo.fileName());
-    
-    // Switch to the new tab
     editorTabs->setCurrentIndex(index);
     
-    file.close();
-    
-    // Update window title
-    setWindowTitle(QString("%1 - Modern C++ IDE").arg(fileInfo.fileName()));
+    statusBar()->showMessage(tr("File loaded"), 2000);
 }
 
-void MainWindow::saveFile() {
-    CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget());
-    if (!editor)
-        return;
-
-    // Get the file path from widget property
-    QString fileName = editor->property("filePath").toString();
-    
-    // If this is a new file, get a save location
-    if (fileName.isEmpty()) {
-        fileName = QFileDialog::getSaveFileName(this,
-            tr("Save File"), "",
-            tr("C++ Files (*.cpp *.h *.hpp);;All Files (*)"));
-
-        if (fileName.isEmpty())
-            return;
+bool MainWindow::saveFile()
+{
+    QString currentPath = currentFilePath();
+    if (currentPath.isEmpty()) {
+        return saveFileAs();
     }
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"),
-            tr("Cannot save file %1:\n%2.")
-            .arg(fileName)
-            .arg(file.errorString()));
-        return;
-    }
-
-    QTextStream out(&file);
-    out << editor->toPlainText();
-    file.close();
-
-    // Update tab text and property
-    QFileInfo fileInfo(fileName);
-    editor->setProperty("filePath", fileName);
-    editorTabs->setTabText(editorTabs->currentIndex(), fileInfo.fileName());
-
-    // Update window title
-    setWindowTitle(QString("%1 - Modern C++ IDE").arg(fileInfo.fileName()));
+    return saveFile(currentPath);
 }
 
-void MainWindow::saveFileAs() {
-    CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget());
-    if (!editor)
-        return;
-
-    QString fileName = QFileDialog::getSaveFileName(this,
-        tr("Save File As"), "",
-        tr("C++ Files (*.cpp *.h *.hpp);;All Files (*)"));
-
+bool MainWindow::saveFileAs()
+{
+    QString fileName = QFileDialog::getSaveFileName(this);
     if (fileName.isEmpty())
-        return;
+        return false;
+    return saveFile(fileName);
+}
 
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"),
-            tr("Cannot save file %1:\n%2.")
-            .arg(fileName)
-            .arg(file.errorString()));
-        return;
+bool MainWindow::saveFile(const QString &filePath)
+{
+    CodeEditor *editor = currentEditor();
+    if (!editor)
+        return false;
+
+    QFile file(filePath);
+    if (!file.open(QFile::WriteOnly | QFile::Text)) {
+        QMessageBox::warning(this, tr("Application"),
+                           tr("Cannot write file %1:\n%2.")
+                           .arg(QDir::toNativeSeparators(filePath),
+                               file.errorString()));
+        return false;
     }
 
     QTextStream out(&file);
     out << editor->toPlainText();
-    file.close();
-
-    // Update tab text and property
-    QFileInfo fileInfo(fileName);
-    editor->setProperty("filePath", fileName);
-    editorTabs->setTabText(editorTabs->currentIndex(), fileInfo.fileName());
-
-    // Update window title
-    setWindowTitle(QString("%1 - Modern C++ IDE").arg(fileInfo.fileName()));
+    editor->setProperty("filePath", filePath);
+    
+    QFileInfo info(filePath);
+    editorTabs->setTabText(editorTabs->currentIndex(), info.fileName());
+    
+    statusBar()->showMessage(tr("File saved"), 2000);
+    return true;
 }
 
-void MainWindow::closeTab(int index) {
-    CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(index));
-    if (!editor)
-        return;
-
-    // Check if the file has unsaved changes
-    if (editor->document()->isModified()) {
-        QMessageBox::StandardButton ret = QMessageBox::warning(this,
-            tr("Unsaved Changes"),
-            tr("The document has been modified.\nDo you want to save your changes?"),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-
-        if (ret == QMessageBox::Save)
-            saveFile();
-        else if (ret == QMessageBox::Cancel)
-            return;
+void MainWindow::closeTab(int index)
+{
+    if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(index))) {
+        if (editor->document()->isModified()) {
+            QMessageBox::StandardButton ret;
+            ret = QMessageBox::warning(this, tr("Application"),
+                tr("The document has been modified.\n"
+                   "Do you want to save your changes?"),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+            if (ret == QMessageBox::Save)
+                saveFile();
+            else if (ret == QMessageBox::Cancel)
+                return;
+        }
+        editorTabs->removeTab(index);
+        delete editor;
     }
-
-    editorTabs->removeTab(index);
-    delete editor;
-
-    // Update window title if no tabs are left
-    if (editorTabs->count() == 0)
-        setWindowTitle("Modern C++ IDE");
 }
 
-void MainWindow::undo() {
-    if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget()))
+void MainWindow::undo()
+{
+    if (CodeEditor *editor = currentEditor())
         editor->undo();
 }
 
-void MainWindow::redo() {
-    if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget()))
+void MainWindow::redo()
+{
+    if (CodeEditor *editor = currentEditor())
         editor->redo();
 }
 
-void MainWindow::cut() {
-    if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget()))
+void MainWindow::cut()
+{
+    if (CodeEditor *editor = currentEditor())
         editor->cut();
 }
 
-void MainWindow::copy() {
-    if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget()))
+void MainWindow::copy()
+{
+    if (CodeEditor *editor = currentEditor())
         editor->copy();
 }
 
-void MainWindow::paste() {
-    if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget()))
+void MainWindow::paste()
+{
+    if (CodeEditor *editor = currentEditor())
         editor->paste();
 }
 
-void MainWindow::onDirectoryChanged(const QString &path) {
-    // Update terminal working directory when project directory changes
-    terminal->setWorkingDirectory(path);
-}
-
-void MainWindow::onFileSelected(const QString &path) {
-    // Update terminal working directory to the file's directory
-    QFileInfo fileInfo(path);
-    terminal->setWorkingDirectory(fileInfo.absolutePath());
-    
-    // Check file type and handle accordingly
-    if (isPreviewableFile(path)) {
-        filePreview->previewFile(path);
-    } else {
-        openFileInEditor(path);
-    }
-}
-
-void MainWindow::openFileInEditor(const QString &path) {
-    // Existing file opening logic
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"),
-            tr("Cannot open file %1:\n%2.")
-            .arg(path)
-            .arg(file.errorString()));
-        return;
-    }
-
-    QTextStream in(&file);
-    CodeEditor *editor = new CodeEditor(this);
-    editor->setPlainText(in.readAll());
-    
-    QFileInfo fileInfo(path);
-    editor->setProperty("filePath", path);
-    int index = editorTabs->addTab(editor, fileInfo.fileName());
-    
-    editorTabs->setCurrentIndex(index);
-    file.close();
-    
-    setWindowTitle(QString("%1 - Modern C++ IDE").arg(fileInfo.fileName()));
-}
-
-void MainWindow::openFolder() {
-    QString dir = QFileDialog::getExistingDirectory(this, tr("Open Folder"),
-        QDir::homePath(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-
-    if (!dir.isEmpty()) {
-        projectTree->setRootPath(dir);
-        terminal->setWorkingDirectory(dir);
-        setWindowTitle(QString("%1 - Modern C++ IDE").arg(QDir(dir).dirName()));
-    }
-}
-
-void MainWindow::setInitialDirectory(const QString &path) {
-    projectTree->setRootPath(path);
-    terminal->setWorkingDirectory(path);
-    
-    // Update window title if it's not the home directory
-    if (path != QDir::homePath()) {
-        setWindowTitle(QString("%1 - Modern C++ IDE").arg(QDir(path).dirName()));
-    }
-}
-
-bool MainWindow::isPreviewableFile(const QString &path) {
-    QMimeDatabase db;
-    QString mimeType = db.mimeTypeForFile(path).name();
-    
-    // Image files
-    if (mimeType.startsWith("image/")) {
-        return true;
-    }
-    
-    // PDF files
-    if (mimeType == "application/pdf") {
-        return true;
-    }
-    
-    return false;
+void MainWindow::about()
+{
+    QMessageBox::about(this, tr("About Modern C++ IDE"),
+        tr("A modern C++ IDE built with Qt 6.\n\n"
+           "Features:\n"
+           "- Project tree with file management\n"
+           "- Multi-tab code editor with syntax highlighting\n"
+           "- File preview for images and PDFs\n"
+           "- Integrated terminal\n"
+           "- Modern dark theme"));
 } 

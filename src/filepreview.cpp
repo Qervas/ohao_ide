@@ -358,4 +358,53 @@ void FilePreview::updatePdfTheme() {
             "}"
         );
     }
+}
+
+void FilePreview::loadFile(const QString &filePath)
+{
+    QFileInfo fileInfo(filePath);
+    QString suffix = fileInfo.suffix().toLower();
+
+    if (suffix == "pdf") {
+        // Handle PDF files
+        scrollArea->hide();
+        pdfView->show();
+        pdfToolBar->show();
+
+        // Load the PDF document
+        pdfDocument->load(filePath);
+        if (pdfDocument->status() == QPdfDocument::Status::Error) {
+            imageLabel->setText(tr("Cannot load PDF %1").arg(filePath));
+            scrollArea->show();
+            pdfView->hide();
+            pdfToolBar->hide();
+            return;
+        }
+
+        // Set the document to the view
+        pdfView->setDocument(pdfDocument);
+        
+        // Update page navigation controls
+        pageSpinBox->setMaximum(pdfDocument->pageCount());
+        pageSpinBox->setValue(1);
+        pageTotalLabel->setText(tr(" of %1").arg(pdfDocument->pageCount()));
+        
+        // Reset zoom level
+        resetZoom();
+        
+        // Set initial zoom mode to fit width
+        pdfView->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+    } else {
+        // Handle image files
+        QImage image(filePath);
+        if (!image.isNull()) {
+            pdfView->setVisible(false);
+            pdfToolBar->hide();
+            scrollArea->show();
+            imageLabel->setVisible(true);
+            updateImageDisplay(image);
+        } else {
+            imageLabel->setText(tr("Cannot load image %1").arg(filePath));
+        }
+    }
 } 

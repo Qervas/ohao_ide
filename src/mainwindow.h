@@ -16,28 +16,37 @@ public:
 private slots:
     void createNewFile();
     void openFile();
-    void saveFile();
-    void saveFileAs();
+    bool saveFile();
+    bool saveFileAs();
+    bool saveFile(const QString &filePath);
     void closeTab(int index);
+    void openFolder();
+    void handleFileSelected(const QString &filePath);
+    void handleDirectoryChanged(const QString &path);
+    void handleRootDirectoryChanged(const QString &path);
     void undo();
     void redo();
     void cut();
     void copy();
     void paste();
-    void onDirectoryChanged(const QString &path);
-    void onFileSelected(const QString &path);
-    void openFolder();
+    void about();
 
 private:
     void setupUI();
     void createMenus();
-    void createActions();
+    void createStatusBar();
+    void loadSettings();
+    void saveSettings();
+    void closeEvent(QCloseEvent *event) override;
+    CodeEditor* currentEditor();
+    QString currentFilePath();
+    void updateWindowTitle();
+    bool maybeSave();
+    void loadFile(const QString &filePath);
 
     ProjectTree *projectTree;
     QTabWidget *editorTabs;
     FilePreview *filePreview;
     Terminal *terminal;
-
-    void openFileInEditor(const QString &path);
-    bool isPreviewableFile(const QString &path);
+    QString projectPath;
 }; 
