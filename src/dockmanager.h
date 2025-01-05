@@ -21,8 +21,7 @@ public:
         ProjectTree,
         Editor,
         ContentView,
-        Terminal,
-        Welcome
+        Terminal
     };
 
     explicit DockManager(QMainWindow *mainWindow);
@@ -47,6 +46,9 @@ public:
 signals:
     void layoutChanged();
     void dockVisibilityChanged(DockWidgetType type, bool visible);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void handleDockLocationChanged(Qt::DockWidgetArea area);

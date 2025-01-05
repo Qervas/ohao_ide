@@ -18,6 +18,10 @@ signals:
     void directoryChanged(const QString &path);
     void rootDirectoryChanged(const QString &path);
 
+protected:
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+
 private slots:
     void onItemClicked(const QModelIndex &index);
     void onItemDoubleClicked(const QModelIndex &index);
@@ -43,4 +47,4 @@ private:
     QStringList getDefaultFilters() const;
     QString getRelativePath(const QString &absolutePath) const;
     void createContextMenuActions(QMenu *menu, bool isFile);
-}; 
+};

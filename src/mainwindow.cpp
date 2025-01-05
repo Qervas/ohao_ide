@@ -34,18 +34,31 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(welcomeView, &WelcomeView::openFile, this, &MainWindow::openFile);
     connect(welcomeView, &WelcomeView::openRecentProject, this, &MainWindow::setInitialDirectory);
 
+    // Create menus first
+    createMenus();
+
     // Setup UI
     setupUI();
-    createMenus();
     createStatusBar();
     createDockWidgets();
     loadSettings();
 
+    // Show welcome view by default
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
+    dockManager->setDockVisible(DockManager::DockWidgetType::Editor, false);
+    dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, false);
+    dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, false);
+
     setWindowTitle(tr("Modern C++ IDE"));
+
+    // Ensure menubar is visible
+    menuBar()->setVisible(true);
 }
 
 void MainWindow::setupUI()
 {
+    setCentralWidget(welcomeView);
+
     // Configure editor tabs
     editorTabs->setTabsClosable(true);
     editorTabs->setMovable(true);
@@ -62,23 +75,11 @@ void MainWindow::setupUI()
     connect(dockManager, &DockManager::dockVisibilityChanged, this, &MainWindow::handleDockVisibilityChanged);
     // Update welcome view with recent projects
     welcomeView->updateRecentProjects(recentProjects);
-
-    // Show welcome view
-    dockManager->setDockVisible(DockManager::DockWidgetType::Welcome, true);
-
-    // Hide all views by default
-    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
-    dockManager->setDockVisible(DockManager::DockWidgetType::Editor, false);
-    dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, false);
-    dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, false);
-
 }
 
 void MainWindow::createDockWidgets()
 {
     // Create dock widgets
-    QDockWidget *welcomeDock = dockManager->addDockWidget(DockManager::DockWidgetType::Welcome,
-                                                        welcomeView, tr("Welcome"));
     QDockWidget *projectDock = dockManager->addDockWidget(DockManager::DockWidgetType::ProjectTree,
                                                         projectTree, tr("Project"));
     QDockWidget *editorDock = dockManager->addDockWidget(DockManager::DockWidgetType::Editor,
@@ -94,14 +95,13 @@ void MainWindow::createDockWidgets()
                              QDockWidget::DockWidgetFloatable |
                              QDockWidget::DockWidgetVerticalTitleBar);
     terminal->setMinimumHeight(100);
-    terminal->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    terminal->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
     // Hide all views by default
     projectDock->hide();
     editorDock->hide();
     contentDock->hide();
     terminalDock->hide();
-    welcomeDock->show();
 
     // Create default layout
     dockManager->resetLayout();
@@ -310,10 +310,28 @@ void MainWindow::updateViewMenu()
 
 void MainWindow::createStatusBar() {
     // Create status bar widget to hold buttons
-    QWidget *statusWidget = new QWidget(this);
-    QHBoxLayout *statusLayout = new QHBoxLayout(statusWidget);
-    statusLayout->setContentsMargins(0, 0, 0, 0);
-    statusLayout->addStretch();
+    QWidget *leftWidget = new QWidget(this);
+    QHBoxLayout *leftLayout = new QHBoxLayout(leftWidget);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+
+    // Project tree button
+    QToolButton *projectTreeButton = new QToolButton(this);
+    projectTreeButton->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
+    projectTreeButton->setToolTip(tr("Toggle Project Tree (Ctrl+B)"));
+    projectTreeButton->setFixedSize(24, 24);
+    connect(projectTreeButton, &QToolButton::clicked, this, [this]() {
+        auto dock = dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree);
+        if (dock) dock->setVisible(!dock->isVisible());
+    });
+    leftLayout->addWidget(projectTreeButton);
+
+    // Add left widget to status bar
+    statusBar()->addWidget(leftWidget);
+
+    // Create right widget for other buttons
+    QWidget *rightWidget = new QWidget(this);
+    QHBoxLayout *rightLayout = new QHBoxLayout(rightWidget);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
 
     // Web browser button
     QToolButton *webButton = new QToolButton(this);
@@ -331,7 +349,6 @@ void MainWindow::createStatusBar() {
         style()->standardIcon(QStyle::SP_CommandLink)));
     terminalButton->setToolTip(tr("Toggle Terminal (Ctrl+`)"));
     terminalButton->setFixedSize(24, 24);
-
     connect(terminalButton, &QToolButton::clicked, this, [this]() {
         auto terminalDock = dockManager->getDockWidget(DockManager::DockWidgetType::Terminal);
         if (terminalDock) {
@@ -339,11 +356,12 @@ void MainWindow::createStatusBar() {
         }
     });
 
-    statusLayout->addWidget(webButton);
-    statusLayout->addWidget(terminalButton);
+    rightLayout->addWidget(webButton);
+    rightLayout->addWidget(terminalButton);
 
-    statusBar()->addPermanentWidget(statusWidget);
+    statusBar()->addPermanentWidget(rightWidget);
 }
+
 
 void MainWindow::loadSettings()
 {
@@ -395,8 +413,7 @@ bool MainWindow::maybeSave()
     return true;
 }
 
-void MainWindow::setInitialDirectory(const QString &path)
-{
+void MainWindow::setInitialDirectory(const QString &path) {
     if (path.isEmpty() || !QDir(path).exists()) {
         return;
     }
@@ -407,19 +424,45 @@ void MainWindow::setInitialDirectory(const QString &path)
     // Update recent projects list
     recentProjects.removeAll(path);
     recentProjects.prepend(path);
-    while (recentProjects.size() > 10) { // Keep last 10 projects
+    while (recentProjects.size() > 10) {
         recentProjects.removeLast();
     }
     updateRecentProjectsMenu();
     welcomeView->updateRecentProjects(recentProjects);
 
-    // Show project tree when folder is opened
-    dockManager->setDockVisible(DockManager::DockWidgetType::Welcome, false);
+    // Switch from welcome view to editor view
+    if (centralWidget() == welcomeView) {
+        welcomeView->setParent(nullptr);
+        setCentralWidget(editorTabs);
+    }
+
+    // Show project tree
     dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
 }
 
 void MainWindow::handleFileSelected(const QString &filePath)
 {
+    QFileInfo fileInfo(filePath);
+
+    // Hide welcome view and switch to editor tabs
+    if (centralWidget() == welcomeView) {
+        welcomeView->setParent(nullptr);
+        setCentralWidget(editorTabs);
+    }
+
+    // Show project tree
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+
+    // Check if file is already open
+    for (int i = 0; i < editorTabs->count(); ++i) {
+        if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
+            if (editor->property("filePath").toString() == filePath) {
+                editorTabs->setCurrentIndex(i);
+                dockManager->setDockVisible(DockManager::DockWidgetType::Editor, true);
+                return;
+            }
+        }
+    }
     loadFile(filePath);
 }
 
@@ -459,9 +502,19 @@ QString MainWindow::currentFilePath()
 
 void MainWindow::createNewFile()
 {
+    // Hide welcome view and switch to editor tabs
+    if (centralWidget() == welcomeView) {
+        welcomeView->setParent(nullptr);
+        setCentralWidget(editorTabs);
+    }
+
+    // Show project tree
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+
     CodeEditor *editor = new CodeEditor(this);
     int index = editorTabs->addTab(editor, tr("untitled"));
     editorTabs->setCurrentIndex(index);
+    dockManager->setDockVisible(DockManager::DockWidgetType::Editor, true);
 }
 
 void MainWindow::openFile()
@@ -476,16 +529,23 @@ void MainWindow::openFolder()
     projectTree->openFolder();
 }
 
-void MainWindow::loadFile(const QString &filePath)
-{
+void MainWindow::loadFile(const QString &filePath) {
     QFileInfo fileInfo(filePath);
+
+    // Hide welcome view if it's still showing
+    if (centralWidget() == welcomeView) {
+        welcomeView->setParent(nullptr);
+        setCentralWidget(editorTabs);
+    }
+
+    // Show project tree
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
 
     // Check if file is already open
     for (int i = 0; i < editorTabs->count(); ++i) {
         if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
             if (editor->property("filePath").toString() == filePath) {
                 editorTabs->setCurrentIndex(i);
-                dockManager->setDockVisible(DockManager::DockWidgetType::Editor, true);
                 return;
             }
         }
@@ -516,7 +576,6 @@ void MainWindow::loadFile(const QString &filePath)
 
     int index = editorTabs->addTab(editor, fileInfo.fileName());
     editorTabs->setCurrentIndex(index);
-    dockManager->setDockVisible(DockManager::DockWidgetType::Editor, true);
 
     statusBar()->showMessage(tr("File loaded"), 2000);
 }

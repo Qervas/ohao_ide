@@ -9,6 +9,9 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QUrl>
+#include <qshortcut.h>
+#include <QMouseEvent>
+
 
 ProjectTree::ProjectTree(QWidget *parent) : QTreeView(parent) {
     setupFileSystemModel();
@@ -16,6 +19,13 @@ ProjectTree::ProjectTree(QWidget *parent) : QTreeView(parent) {
     setupContextMenus();
     model->setRootPath("");
     setRootIndex(model->index(""));
+    // Add F2 shortcut for rename
+    QShortcut *renameShortcut = new QShortcut(QKeySequence(Qt::Key_F2), this);
+    connect(renameShortcut, &QShortcut::activated, this, &ProjectTree::renameItem);
+
+    // Enable double click on empty area
+    setSelectionMode(QAbstractItemView::SingleSelection);
+    setSelectionBehavior(QAbstractItemView::SelectRows);
 }
 
 void ProjectTree::setupFileSystemModel() {
@@ -27,6 +37,7 @@ void ProjectTree::setupFileSystemModel() {
     // Set name filters but don't hide the filtered ones (just gray them out)
     model->setNameFilterDisables(false);
     model->setNameFilters(getDefaultFilters());
+    model->setReadOnly(false);  // Make sure the model is editable
 
     setModel(model);
 }
@@ -172,6 +183,25 @@ void ProjectTree::onItemDoubleClicked(const QModelIndex &index) {
 
     if (fileInfo.isFile()) {
         emit fileSelected(path);
+    }
+}
+
+void ProjectTree::mouseDoubleClickEvent(QMouseEvent *event) {
+    QModelIndex index = indexAt(event->pos());
+    if (!index.isValid()) {
+        // Double clicked on empty area
+        createNewFile();
+        return;
+    }
+    QTreeView::mouseDoubleClickEvent(event);
+}
+
+void ProjectTree::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Delete) {
+        deleteItem();
+        event->accept();
+    } else {
+        QTreeView::keyPressEvent(event);
     }
 }
 

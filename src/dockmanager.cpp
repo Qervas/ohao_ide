@@ -15,10 +15,11 @@ QDockWidget* DockManager::addDockWidget(DockWidgetType type, QWidget *widget, co
     dock->setObjectName(getDockTypeName(type));
     dock->setWidget(widget);
 
-    // Set features
-    QDockWidget::DockWidgetFeatures features = QDockWidget::DockWidgetClosable |
-                                              QDockWidget::DockWidgetMovable |
-                                              QDockWidget::DockWidgetFloatable;
+    // Set features based on type
+    QDockWidget::DockWidgetFeatures features;
+    features = QDockWidget::DockWidgetClosable |
+                QDockWidget::DockWidgetMovable |
+                QDockWidget::DockWidgetFloatable;
     dock->setFeatures(features);
 
     // Set style
@@ -47,6 +48,7 @@ QDockWidget* DockManager::addDockWidget(DockWidgetType type, QWidget *widget, co
 
     // Connect signals
     connectDockSignals(dock);
+    mainWindow->addDockWidget(convertDockArea(DockArea::Left), dock);
 
     return dock;
 }
@@ -92,13 +94,8 @@ void DockManager::loadLayout(const QString &name)
 
 void DockManager::resetLayout()
 {
-    // Hide all docks first
-    for (QDockWidget *dock : dockWidgets.values()) {
-        dock->hide();
-    }
 
-    // Don't show any docks by default
-    // Only set up the areas where docks will appear when shown
+   // Set up default dock areas
     if (QDockWidget *projectDock = getDockWidget(DockWidgetType::ProjectTree)) {
         mainWindow->addDockWidget(Qt::LeftDockWidgetArea, projectDock);
     }
@@ -186,6 +183,25 @@ void DockManager::connectDockSignals(QDockWidget *dock)
             this, &DockManager::handleDockVisibilityChanged);
     connect(dock, &QDockWidget::topLevelChanged,
             this, &DockManager::handleTopLevelChanged);
+
+    dock->widget()->installEventFilter(this);
+}
+
+bool DockManager::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::Resize) {
+        QWidget *widget = qobject_cast<QWidget*>(watched);
+        if (widget) {
+            // Find the corresponding dock widget
+            QDockWidget *dock = qobject_cast<QDockWidget*>(widget->parent());
+            if (dock) {
+                const int minSize = 5;  // minimum size in pixels
+                if (dock->widget()->height() < minSize || dock->widget()->width() < minSize) {
+                    dock->hide();
+                }
+            }
+        }
+    }
+    return QObject::eventFilter(watched, event);
 }
 
 QString DockManager::getDockTypeName(DockWidgetType type) const

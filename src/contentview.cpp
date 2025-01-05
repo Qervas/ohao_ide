@@ -22,7 +22,10 @@ void ContentView::setupUI() {
     tabs->setTabsClosable(true);
     tabs->setMovable(true);
     tabs->setDocumentMode(true);
+    tabs->setElideMode(Qt::ElideMiddle);
 
+    //Set a minimum tab width
+    tabs->setStyleSheet("QTabBar::tab { min-width: 100px; max-width: 200px; }");
     mainLayout->addWidget(tabs);
 
     // Connect close tab signal
@@ -42,12 +45,20 @@ void ContentView::loadFile(const QString &filePath) {
         preview->loadFile(filePath);
         preview->setProperty("filePath", filePath);
 
-        int index = tabs->addTab(preview, fileInfo.fileName());
+        // Truncate filename if it's too long (more than 20 characters)
+        QString displayName = fileInfo.fileName();
+        if (displayName.length() > 20) {
+            displayName = displayName.left(17) + "...";
+        }
+
+        int index = tabs->addTab(preview, displayName);
+        tabs->setTabToolTip(index, fileInfo.fileName()); // Show full name on hover
         tabs->setCurrentIndex(index);
         currentPath = filePath;
         currentTitle = fileInfo.fileName();
     }
 }
+
 
 void ContentView::loadWebContent(const QString &url) {
     // Check if URL is already open
@@ -61,15 +72,21 @@ void ContentView::loadWebContent(const QString &url) {
     webView->setUrl(QUrl(url));
     webView->setProperty("filePath", url);
 
-    // Add to tabs
-    int index = tabs->addTab(webView, "Web");
+    // Add to tabs with a generic name initially
+    int index = tabs->addTab(webView, "Loading...");
     tabs->setCurrentIndex(index);
 
     // Update tab title when page is loaded
     connect(webView, &QWebEngineView::titleChanged, this, [this, webView](const QString &title) {
         int index = tabs->indexOf(webView);
         if (index != -1) {
-            tabs->setTabText(index, title);
+            // Truncate title if it's too long
+            QString displayTitle = title;
+            if (displayTitle.length() > 20) {
+                displayTitle = displayTitle.left(17) + "...";
+            }
+            tabs->setTabText(index, displayTitle);
+            tabs->setTabToolTip(index, title); // Show full title on hover
         }
     });
 }
