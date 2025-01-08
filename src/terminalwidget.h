@@ -1,42 +1,55 @@
 #pragma once
-#include <QWidget>
-#include <QProcess>
 #include <QPlainTextEdit>
-#include "commandlineedit.h"
+#include <QProcess>
+#include <QTextCharFormat>
+#include <QWidget>
 
 class TerminalWidget : public QWidget {
-    Q_OBJECT
+  Q_OBJECT
 
 public:
-    explicit TerminalWidget(QWidget *parent = nullptr);
-    void setWorkingDirectory(const QString &path);
+  explicit TerminalWidget(QWidget *parent = nullptr);
+  void setWorkingDirectory(const QString &path);
 
-protected:
-    void focusInEvent(QFocusEvent *event) override;
-    bool eventFilter(QObject *obj, QEvent *event) override;
+signals:
+  void closeRequested();
 
 private:
-    QProcess *process;
-    QPlainTextEdit *outputDisplay;
-    CommandLineEdit *commandInput;
-    QString currentWorkingDirectory;
-    QString username;
-    QString hostname;
+  QProcess *process;
+  QPlainTextEdit *terminal;
+  QString currentWorkingDirectory;
+  QString username;
+  QString hostname;
+  QStringList commandHistory;
+  int historyIndex;
+  int promptPosition;
+  QString previousWorkingDirectory;
 
-    void setupUI();
-    void setupProcess();
-    void executeCommand(const QString &command);
-    void appendOutput(const QString &text, const QColor &color = QColor("#D4D4D4"));
-    QString getShell();
-    void updatePrompt();
-    QString getColoredPrompt() const;
+  void setupUI();
+  void setupProcess();
+  void executeCommand(const QString &command);
+  void appendOutput(const QString &text,
+                    const QColor &color = QColor("#D4D4D4"));
+  QString getColoredPrompt() const;
+  void displayPrompt();
+  void handleInput(QKeyEvent *event);
+  void handleCommandExecution();
+  void handleHistoryNavigation(bool up);
+  QString getCurrentCommand() const;
+  void setCurrentCommand(const QString &command);
+  bool isInPromptArea() const;
+  void handleCtrlC();
+  void handleCtrlL();
+  void handleCtrlD();
+  void handleCdCommand(const QString &command);
+  void handleTabCompletion();
+  QStringList getCompletions(const QString &prefix) const;
+  void showCompletions(const QStringList &completions);
+  void appendFormattedOutput(const QString &text);
 
 private slots:
-    void onReadyReadStandardOutput();
-    void onReadyReadStandardError();
-    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void handleReturnPressed();
-    void handleTabCompletion();
-    QStringList getCompletions(const QString &prefix);
-    void showCompletions(const QStringList &completions);
+  void onReadyReadStandardOutput();
+  void onReadyReadStandardError();
+  void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+  bool eventFilter(QObject *obj, QEvent *event) override;
 };
