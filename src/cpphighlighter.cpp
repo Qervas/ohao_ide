@@ -21,29 +21,65 @@ CppHighlighter::CppHighlighter(QTextDocument *parent)
         QStringLiteral("\\bvolatile\\b"), QStringLiteral("\\bnoexcept\\b"),
         QStringLiteral("\\bnullptr\\b"), QStringLiteral("\\bconstexpr\\b"),
         QStringLiteral("\\bconcept\\b"), QStringLiteral("\\brequires\\b"),
-        // Control flow
-        QStringLiteral("\\bif\\b"), QStringLiteral("\\belse\\b"),
-        QStringLiteral("\\bfor\\b"), QStringLiteral("\\bwhile\\b"),
-        QStringLiteral("\\bdo\\b"), QStringLiteral("\\bswitch\\b"),
-        QStringLiteral("\\bcase\\b"), QStringLiteral("\\bbreak\\b"),
-        QStringLiteral("\\bcontinue\\b"), QStringLiteral("\\breturn\\b"),
-        QStringLiteral("\\btry\\b"), QStringLiteral("\\bcatch\\b"),
-        QStringLiteral("\\bthrow\\b"), QStringLiteral("\\busing\\b"),
-        // Types
-        QStringLiteral("\\bvoid\\b"), QStringLiteral("\\bchar\\b"),
-        QStringLiteral("\\bshort\\b"), QStringLiteral("\\bint\\b"),
-        QStringLiteral("\\blong\\b"), QStringLiteral("\\bfloat\\b"),
-        QStringLiteral("\\bdouble\\b"), QStringLiteral("\\bbool\\b"),
-        QStringLiteral("\\bsigned\\b"), QStringLiteral("\\bunsigned\\b"),
-        QStringLiteral("\\bauto\\b"), QStringLiteral("\\bregister\\b"),
-        QStringLiteral("\\bextern\\b"), QStringLiteral("\\bmutable\\b"),
-        QStringLiteral("\\bthis\\b"), QStringLiteral("\\bthread_local\\b")
+        
+        // Additional C++17/20 keywords
+        QStringLiteral("\\bco_await\\b"), QStringLiteral("\\bco_return\\b"),
+        QStringLiteral("\\bco_yield\\b"), QStringLiteral("\\bimport\\b"),
+        QStringLiteral("\\bmodule\\b"), QStringLiteral("\\bexport\\b"),
+        QStringLiteral("\\brequires\\b"), QStringLiteral("\\bconstraint\\b"),
+        QStringLiteral("\\bthreadlocal\\b"), QStringLiteral("\\bfinal\\b"),
+        QStringLiteral("\\boverride\\b"), QStringLiteral("\\bimport\\b"),
+        QStringLiteral("\\bexport\\b"), QStringLiteral("\\bmodule\\b"),
+        
+        // Qt-specific keywords
+        QStringLiteral("\\bslot\\b"), QStringLiteral("\\bsignal\\b"),
+        QStringLiteral("\\bemit\\b"), QStringLiteral("\\bQ_OBJECT\\b"),
+        QStringLiteral("\\bQ_PROPERTY\\b"), QStringLiteral("\\bQ_SIGNALS\\b"),
+        QStringLiteral("\\bQ_SLOTS\\b"), QStringLiteral("\\bQ_EMIT\\b"),
+        QStringLiteral("\\bQ_INVOKABLE\\b"), QStringLiteral("\\bQ_GADGET\\b")
     };
 
+    // Add STL containers with different color
+    stlContainerFormat.setForeground(QColor("#4EC9B0"));
+    const QString stlContainers[] = {
+        QStringLiteral("\\bvector\\b"), QStringLiteral("\\bmap\\b"),
+        QStringLiteral("\\bset\\b"), QStringLiteral("\\bunordered_map\\b"),
+        QStringLiteral("\\bunordered_set\\b"), QStringLiteral("\\blist\\b"),
+        QStringLiteral("\\bdeque\\b"), QStringLiteral("\\bqueue\\b"),
+        QStringLiteral("\\bstack\\b"), QStringLiteral("\\barray\\b"),
+        QStringLiteral("\\bbitset\\b"), QStringLiteral("\\bforward_list\\b"),
+        QStringLiteral("\\bmultimap\\b"), QStringLiteral("\\bmultiset\\b"),
+        QStringLiteral("\\bpriority_queue\\b")
+    };
+
+    // Smart pointers
+    smartPtrFormat.setForeground(QColor("#4EC9B0"));
+    const QString smartPtrs[] = {
+        QStringLiteral("\\bunique_ptr\\b"), QStringLiteral("\\bshared_ptr\\b"),
+        QStringLiteral("\\bweak_ptr\\b"), QStringLiteral("\\bauto_ptr\\b")
+    };
+
+    // Add rules for existing keywords
     for (const QString &pattern : keywordPatterns) {
         HighlightingRule rule;
         rule.pattern = QRegularExpression(pattern);
         rule.format = keywordFormat;
+        highlightingRules.append(rule);
+    }
+
+    // Add rules for STL containers
+    for (const QString &pattern : stlContainers) {
+        HighlightingRule rule;
+        rule.pattern = QRegularExpression(pattern);
+        rule.format = stlContainerFormat;
+        highlightingRules.append(rule);
+    }
+
+    // Add rules for smart pointers
+    for (const QString &pattern : smartPtrs) {
+        HighlightingRule rule;
+        rule.pattern = QRegularExpression(pattern);
+        rule.format = smartPtrFormat;
         highlightingRules.append(rule);
     }
 

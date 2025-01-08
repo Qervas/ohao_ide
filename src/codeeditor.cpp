@@ -2,6 +2,7 @@
 #include <QPainter>
 #include <QTextBlock>
 #include <QFontDatabase>
+#include <QSettings>
 
 class LineNumberArea : public QWidget {
 public:
@@ -26,8 +27,11 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent)
     highlighter = new CppHighlighter(document());
 
     // Set modern font
-    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    font.setPointSize(11);
+    QSettings settings;
+    QFont font(
+        settings.value("editor/fontFamily", "Monospace").toString(),
+        settings.value("editor/fontSize", 12).toInt()
+    );
     setFont(font);
 
     // Set tab width to 4 spaces

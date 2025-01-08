@@ -28,6 +28,8 @@ private:
     QTextCharFormat preprocessorFormat;
     QTextCharFormat numberFormat;
     QTextCharFormat operatorFormat;
+    QTextCharFormat stlContainerFormat;
+    QTextCharFormat smartPtrFormat;
 
     QRegularExpression commentStartExpression;
     QRegularExpression commentEndExpression;

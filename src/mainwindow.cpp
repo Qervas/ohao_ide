@@ -18,6 +18,8 @@
 #include <QHBoxLayout>
 #include <QApplication>
 #include <QStyle>
+#include "preferencesdialog.h"
+#include "sessionsettings.h"
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
@@ -50,6 +52,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, false);
 
     setWindowTitle(tr("Modern C++ IDE"));
+
+    loadSessionState();
 
     // Ensure menubar is visible
     menuBar()->setVisible(true);
@@ -222,6 +226,12 @@ void MainWindow::createMenus()
     recentProjectsMenu = new QMenu(tr("Recent Projects"), this);
     fileMenu->insertMenu(fileMenu->actions().at(3), recentProjectsMenu); // Insert after Open Folder
     updateRecentProjectsMenu();
+
+    // Settings menu
+    QMenu *settingsMenu = menuBar->addMenu(tr("&Settings"));
+    QAction *preferencesAction = settingsMenu->addAction(tr("&Preferences"));
+    preferencesAction->setShortcut(QKeySequence::Preferences);
+    connect(preferencesAction, &QAction::triggered, this, &MainWindow::showPreferences);
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent *event)
@@ -387,8 +397,13 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    saveSettings();
-    QMainWindow::closeEvent(event);
+    if (maybeSave()) {
+        saveSettings();
+        saveSessionState();
+        event->accept();
+    } else {
+        event->ignore();
+    }
 }
 
 bool MainWindow::maybeSave()
@@ -705,5 +720,82 @@ void MainWindow::updateRecentProjectsMenu()
             updateRecentProjectsMenu();
             saveSettings();
         });
+    }
+}
+
+void MainWindow::showPreferences() {
+    PreferencesDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // Save settings
+        QSettings settings;
+        settings.setValue("editor/fontSize", dialog.getFontSize());
+        settings.setValue("editor/fontFamily", dialog.getFontFamily());
+        
+        // Apply settings to all open editors
+        applyEditorSettings();
+    }
+}
+
+void MainWindow::applyEditorSettings() {
+    QSettings settings;
+    QFont font(
+        settings.value("editor/fontFamily", "Monospace").toString(),
+        settings.value("editor/fontSize", 11).toInt()
+    );
+    
+    // Apply to all open editor tabs
+    for (int i = 0; i < editorTabs->count(); ++i) {
+        if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
+            editor->setFont(font);
+        }
+    }
+}
+
+void MainWindow::saveSessionState() {
+    QStringList openedFiles;
+    QStringList openedDirs;
+    
+    // Collect opened files
+    for (int i = 0; i < editorTabs->count(); ++i) {
+        if (CodeEditor* editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
+            QString filePath = editor->property("filePath").toString();
+            if (!filePath.isEmpty()) {
+                openedFiles << filePath;
+            }
+        }
+    }
+    
+    // Add current project directory if exists
+    if (!projectPath.isEmpty()) {
+        openedDirs << projectPath;
+    }
+    
+    SessionSettings::instance().saveSession(
+        openedFiles,
+        openedDirs,
+        editorTabs->currentIndex()
+    );
+}
+
+void MainWindow::loadSessionState() {
+    QStringList openedFiles;
+    QStringList openedDirs;
+    int currentTabIndex;
+    
+    SessionSettings::instance().loadSession(openedFiles, openedDirs, currentTabIndex);
+    
+    // Load directories
+    for (const QString& dir : openedDirs) {
+        setInitialDirectory(dir);
+    }
+    
+    // Load files
+    for (const QString& file : openedFiles) {
+        loadFile(file);
+    }
+    
+    // Set current tab
+    if (currentTabIndex >= 0 && currentTabIndex < editorTabs->count()) {
+        editorTabs->setCurrentIndex(currentTabIndex);
     }
 }
