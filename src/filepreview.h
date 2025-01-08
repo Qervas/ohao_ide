@@ -1,4 +1,5 @@
-#pragma once
+#ifndef FILEPREVIEW_H
+#define FILEPREVIEW_H
 
 #include <QAbstractItemModel>
 #include <QComboBox>
@@ -8,7 +9,7 @@
 #include <QPdfDocument>
 #include <QPdfPageNavigator>
 #include <QPdfSearchModel>
-#include <QPdfView>
+#include "invertedpdfview.h"
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -46,7 +47,7 @@ private:
 
   // PDF components
   QPdfDocument *pdfDoc;
-  QPdfView *pdfView;
+  InvertedPdfView *pdfView;
   QPdfBookmarkModel *bookmarkModel;
   QTreeView *bookmarkView;
   QPdfSearchModel *searchModel;
@@ -69,6 +70,11 @@ private:
   QPixmap originalPixmap;
   qreal currentZoomFactor;
 
+  bool isDarkMode;
+  QAction *toggleDarkModeAction;
+  void toggleDarkMode();
+  void updatePdfDarkMode();
+
   void setupUI();
   void setupPDFTools();
   void loadPDF(const QString &filePath);
@@ -76,3 +82,5 @@ private:
   void searchDocument(bool forward = true);
   void updateImageDisplay();
 };
+
+#endif // FILEPREVIEW_H

@@ -7,7 +7,8 @@
 #include <QPdfBookmarkModel>
 #include <QPdfDocument>
 #include <QPdfSelection>
-#include <QPdfView>
+#include <QPdfSearchModel>
+#include "invertedpdfview.h"
 #include <QShortcut>
 #include <QSpinBox>
 #include <QSplitter>
@@ -20,9 +21,17 @@
 #include <QWheelEvent>
 #include <QWidget>
 #include <qpdfbookmarkmodel.h>
+
 using Role = QPdfBookmarkModel::Role;
 
-FilePreview::FilePreview(QWidget *parent) : QWidget(parent) { setupUI(); }
+FilePreview::FilePreview(QWidget *parent)
+    : QWidget(parent), isDarkMode(false) {
+  setupUI();
+}
+
+FilePreview::~FilePreview() {
+  cleanup();
+}
 
 void FilePreview::cleanup() {
   if (searchModel) {
@@ -35,8 +44,6 @@ void FilePreview::cleanup() {
     pdfDoc->close();
   }
 }
-
-FilePreview::~FilePreview() { cleanup(); }
 
 void FilePreview::setupUI() {
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -63,7 +70,8 @@ void FilePreview::setupUI() {
 
   // Setup PDF viewer
   pdfDoc = new QPdfDocument(this);
-  pdfView = new QPdfView(this);
+
+  pdfView = new InvertedPdfView(this);
   pdfView->setDocument(pdfDoc);
   pdfView->setPageMode(QPdfView::PageMode::MultiPage);
   pdfView->setZoomMode(QPdfView::ZoomMode::FitToWidth);
@@ -97,13 +105,13 @@ void FilePreview::setupUI() {
   // Additional Ctrl++ and Ctrl+- shortcuts
   QShortcut *zoomInPlusShortcut =
       new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus), this);
-  connect(zoomInPlusShortcut, &QShortcut::activated, this,
-          &FilePreview::zoomIn);
+  connect(zoomInPlusShortcut, &QShortcut::activated,
+          this, &FilePreview::zoomIn);
 
   QShortcut *zoomOutMinusShortcut =
       new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus), this);
-  connect(zoomOutMinusShortcut, &QShortcut::activated, this,
-          &FilePreview::zoomOut);
+  connect(zoomOutMinusShortcut, &QShortcut::activated,
+          this, &FilePreview::zoomOut);
 
   // Connect signals
   connect(bookmarkView, &QTreeView::clicked, this,
@@ -176,17 +184,29 @@ void FilePreview::setupPDFTools() {
   connect(tocAction, &QAction::triggered,
           [this]() { bookmarkView->setVisible(!bookmarkView->isVisible()); });
 
+  // Add dark mode toggle button
+  toolbar->addSeparator();
+  toggleDarkModeAction = toolbar->addAction(tr("Dark Mode"));
+  toggleDarkModeAction->setCheckable(true);
+  toggleDarkModeAction->setChecked(false);
+  connect(toggleDarkModeAction, &QAction::triggered, this,
+          &FilePreview::toggleDarkMode);
+
   // Connect signals
-  connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-          &FilePreview::handlePageChange);
-  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-          &FilePreview::handleZoomChange);
-  connect(searchEdit, &QLineEdit::returnPressed, this,
-          &FilePreview::handleSearch);
-  connect(searchPrev, &QAction::triggered, this,
-          &FilePreview::handleSearchPrev);
-  connect(searchNext, &QAction::triggered, this,
-          &FilePreview::handleSearchNext);
+  connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+          this, &FilePreview::handlePageChange);
+
+  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &FilePreview::handleZoomChange);
+
+  connect(searchEdit, &QLineEdit::returnPressed,
+          this, &FilePreview::handleSearch);
+
+  connect(searchPrev, &QAction::triggered,
+          this, &FilePreview::handleSearchPrev);
+
+  connect(searchNext, &QAction::triggered,
+          this, &FilePreview::handleSearchNext);
 }
 
 void FilePreview::loadFile(const QString &filePath) {
@@ -239,6 +259,9 @@ void FilePreview::loadPDF(const QString &filePath) {
   // Update UI
   updatePageInfo();
 
+  // Update dark mode state
+  updatePdfDarkMode();
+
   // Initial page navigation
   if (auto navigator = pdfView->pageNavigator()) {
     navigator->jump(0, QPointF(0, 0), 1.0); // Start at first page
@@ -257,13 +280,12 @@ void FilePreview::loadImage(const QString &filePath) {
 }
 
 void FilePreview::updateImageDisplay() {
-  if (originalPixmap.isNull())
+  if (originalPixmap.isNull()) {
     return;
-
+  }
   QSize scaledSize = originalPixmap.size() * currentZoomFactor;
-  QPixmap scaledPixmap = originalPixmap.scaled(scaledSize, Qt::KeepAspectRatio,
-                                               Qt::SmoothTransformation);
-
+  QPixmap scaledPixmap = originalPixmap.scaled(
+      scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   imageLabel->setPixmap(scaledPixmap);
 }
 
@@ -297,11 +319,10 @@ void FilePreview::zoomOut() {
 }
 
 void FilePreview::handlePageChange(int page) {
-  if (!pdfDoc || page < 1 || page > pdfDoc->pageCount())
+  if (!pdfDoc || page < 1 || page > pdfDoc->pageCount()) {
     return;
-
+  }
   if (auto navigator = pdfView->pageNavigator()) {
-    // Keep current zoom and location when changing pages
     qreal currentZoom = navigator->currentZoom();
     QPointF currentLoc = navigator->currentLocation();
     navigator->jump(page - 1, currentLoc, currentZoom);
@@ -309,80 +330,78 @@ void FilePreview::handlePageChange(int page) {
 }
 
 void FilePreview::handleZoomChange(int index) {
-  if (index < 0 || index >= zoomCombo->count())
+  if (index < 0 || index >= zoomCombo->count()) {
     return;
-
+  }
   QString zoomText = zoomCombo->itemText(index);
-  zoomText.chop(1); // Remove %
+  zoomText.chop(1); // Remove '%'
   qreal zoomFactor = zoomText.toDouble() / 100.0;
 
   if (auto navigator = pdfView->pageNavigator()) {
-    // Update zoom while maintaining current page and location
-    navigator->update(navigator->currentPage(), navigator->currentLocation(),
+    navigator->update(navigator->currentPage(),
+                      navigator->currentLocation(),
                       zoomFactor);
   }
 }
 
 void FilePreview::handleSearch() {
   currentSearchText = searchEdit->text();
-  if (currentSearchText.isEmpty())
+  if (currentSearchText.isEmpty()) {
     return;
-
+  }
   searchModel->setSearchString(currentSearchText);
 
-  // Start from current page
-  if (auto navigator = pdfView->pageNavigator())
+  if (auto navigator = pdfView->pageNavigator()) {
     currentSearchPage = navigator->currentPage();
-
-  // Select first result
-  if (searchModel->rowCount(QModelIndex()) > 0)
+  }
+  if (searchModel->rowCount(QModelIndex()) > 0) {
     pdfView->setCurrentSearchResultIndex(0);
+  }
 }
 
-void FilePreview::handleSearchNext() { searchDocument(true); }
+void FilePreview::handleSearchNext() {
+  searchDocument(true);
+}
 
-void FilePreview::handleSearchPrev() { searchDocument(false); }
+void FilePreview::handleSearchPrev() {
+  searchDocument(false);
+}
 
 void FilePreview::searchDocument(bool forward) {
-  if (currentSearchText.isEmpty())
+  if (currentSearchText.isEmpty()) {
     return;
-
-  // Set the search text in the model
+  }
   searchModel->setSearchString(currentSearchText);
 
-  // Get current index
   int currentIndex = pdfView->currentSearchResultIndex();
+  int totalResults = searchModel->rowCount(QModelIndex());
 
-  // Move to next/previous result
   if (forward) {
-    if (currentIndex <
-        searchModel->rowCount(QModelIndex()) - 1) // Add QModelIndex() parameter
+    if (currentIndex < totalResults - 1) {
       pdfView->setCurrentSearchResultIndex(currentIndex + 1);
-    else
-      pdfView->setCurrentSearchResultIndex(0); // Wrap around
+    } else {
+      pdfView->setCurrentSearchResultIndex(0); // wrap
+    }
   } else {
-    if (currentIndex > 0)
+    if (currentIndex > 0) {
       pdfView->setCurrentSearchResultIndex(currentIndex - 1);
-    else
-      pdfView->setCurrentSearchResultIndex(
-          searchModel->rowCount(QModelIndex()) - 1); // Wrap around
+    } else {
+      pdfView->setCurrentSearchResultIndex(totalResults - 1); // wrap
+    }
   }
 }
 
 void FilePreview::handleBookmarkClicked(const QModelIndex &index) {
-  if (!index.isValid() || !pdfDoc)
+  if (!index.isValid() || !pdfDoc) {
     return;
-
-  // Get bookmark information using the model's roles
+  }
   int page = bookmarkModel->data(index, static_cast<int>(Role::Page)).toInt();
   QPointF location =
       bookmarkModel->data(index, static_cast<int>(Role::Location)).toPointF();
   qreal zoom =
       bookmarkModel->data(index, static_cast<int>(Role::Zoom)).toReal();
 
-  // Jump to the bookmark location
   if (auto navigator = pdfView->pageNavigator()) {
-    // If zoom is 0 (default), keep current zoom level
     if (zoom <= 0) {
       zoom = navigator->currentZoom();
     }
@@ -391,33 +410,31 @@ void FilePreview::handleBookmarkClicked(const QModelIndex &index) {
 }
 
 void FilePreview::updatePageInfo() {
-  if (!pdfDoc || !pdfView)
+  if (!pdfDoc || !pdfView) {
     return;
-
-  const int pageCount = pdfDoc->pageCount();
+  }
+  int pageCount = pdfDoc->pageCount();
   pageSpinBox->setMaximum(pageCount);
   pageTotalLabel->setText(QString(" / %1").arg(pageCount));
 
   if (auto navigator = pdfView->pageNavigator()) {
-    // Disconnect previous connections to avoid multiple connections
-    disconnect(navigator, &QPdfPageNavigator::currentPageChanged, this,
-               nullptr);
+    // Avoid duplicate connections
+    disconnect(navigator, &QPdfPageNavigator::currentPageChanged,
+               this, nullptr);
 
-    // Connect to page changes
-    connect(navigator, &QPdfPageNavigator::currentPageChanged, this,
-            [this](int page) {
+    connect(navigator, &QPdfPageNavigator::currentPageChanged,
+            this, [this](int page) {
               pageSpinBox->blockSignals(true);
               pageSpinBox->setValue(page + 1);
               pageSpinBox->blockSignals(false);
             });
 
-    // Connect to zoom changes
-    connect(navigator, &QPdfPageNavigator::currentZoomChanged, this,
-            [this](qreal zoom) {
-              int index =
-                  zoomCombo->findText(QString::number(int(zoom * 100)) + "%");
-              if (index >= 0) {
-                zoomCombo->setCurrentIndex(index);
+    connect(navigator, &QPdfPageNavigator::currentZoomChanged,
+            this, [this](qreal zoom) {
+              int percent = int(zoom * 100);
+              int idx = zoomCombo->findText(QString::number(percent) + "%");
+              if (idx >= 0) {
+                zoomCombo->setCurrentIndex(idx);
               }
             });
   }
@@ -427,19 +444,19 @@ void FilePreview::wheelEvent(QWheelEvent *event) {
   if (event->modifiers() & Qt::ControlModifier) {
     if (stack->currentWidget() == imageLabel) {
       // For images
-      const qreal factor = event->angleDelta().y() > 0 ? 1.1 : 0.9;
+      qreal factor = (event->angleDelta().y() > 0) ? 1.1 : 0.9;
       currentZoomFactor *= factor;
       updateImageDisplay();
     } else if (stack->currentWidget() == pdfView) {
       // For PDFs
-      int currentIndex = zoomCombo->currentIndex();
+      int idx = zoomCombo->currentIndex();
       if (event->angleDelta().y() > 0) {
-        if (currentIndex < zoomCombo->count() - 1) {
-          handleZoomChange(currentIndex + 1);
+        if (idx < zoomCombo->count() - 1) {
+          handleZoomChange(idx + 1);
         }
       } else {
-        if (currentIndex > 0) {
-          handleZoomChange(currentIndex - 1);
+        if (idx > 0) {
+          handleZoomChange(idx - 1);
         }
       }
     }
@@ -447,4 +464,24 @@ void FilePreview::wheelEvent(QWheelEvent *event) {
     return;
   }
   QWidget::wheelEvent(event);
+}
+
+void FilePreview::toggleDarkMode() {
+  isDarkMode = toggleDarkModeAction->isChecked();
+  updatePdfDarkMode();
+}
+
+void FilePreview::updatePdfDarkMode() {
+  if (!pdfView || !pdfDoc) {
+    return;
+  }
+  // Because pdfView is now an InvertedPdfView, we can call setInvertColors().
+  pdfView->setInvertColors(isDarkMode);
+
+  // Optional: adjust style sheets or background colors
+  if (isDarkMode) {
+    // pdfView->setStyleSheet("background: #202020;");
+  } else {
+    // pdfView->setStyleSheet("");
+  }
 }
