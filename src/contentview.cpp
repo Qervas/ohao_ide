@@ -140,3 +140,42 @@ QString ContentView::getCurrentFilePath() const {
   }
   return currentPath; // Fall back to stored path
 }
+
+QList<ContentView::TabState> ContentView::getTabStates() const {
+  QList<TabState> states;
+  for (int i = 0; i < tabs->count(); ++i) {
+    TabState state;
+    QWidget *widget = tabs->widget(i);
+
+    if (BrowserView *browser = qobject_cast<BrowserView *>(widget)) {
+      state.type = "web";
+      state.url = browser->currentUrl();
+      state.title = tabs->tabText(i);
+      states.append(state);
+    } else if (FilePreview *preview = qobject_cast<FilePreview *>(widget)) {
+      state.type = "file";
+      state.filePath = widget->property("filePath").toString();
+      state.title = tabs->tabText(i);
+      states.append(state);
+    }
+  }
+  return states;
+}
+
+void ContentView::restoreTabStates(const QList<TabState> &states) {
+  // Clear existing tabs
+  while (tabs->count() > 0) {
+    QWidget *widget = tabs->widget(0);
+    tabs->removeTab(0);
+    delete widget;
+  }
+
+  // Restore tabs
+  for (const TabState &state : states) {
+    if (state.type == "web") {
+      loadWebContent(state.url);
+    } else if (state.type == "file") {
+      loadFile(state.filePath);
+    }
+  }
+}

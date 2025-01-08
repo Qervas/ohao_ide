@@ -1,4 +1,5 @@
 #pragma once
+#include "contentview.h"
 #include <QObject>
 #include <QStringList>
 
@@ -11,6 +12,7 @@ public:
     QString filePath; // For file preview
     bool isVisible;
     QByteArray geometry;
+    QList<ContentView::TabState> tabStates;
   };
   static SessionSettings &instance();
 

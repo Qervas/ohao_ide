@@ -769,10 +769,7 @@ void MainWindow::saveSessionState() {
     state.isVisible = dock->isVisible();
     state.geometry = dock->saveGeometry();
     if (contentView) {
-      // Save content view state (browser URL or preview file)
-      // You'll need to add methods to ContentView to get these
-      state.url = contentView->getCurrentUrl();
-      state.filePath = contentView->getCurrentFilePath();
+      state.tabStates = contentView->getTabStates();
     }
     windowStates["contentView"] = state;
   }
@@ -811,11 +808,19 @@ void MainWindow::loadSessionState() {
 
   // Restore window states
   if (!windowStates.isEmpty()) {
-    const auto contentViewState = windowStates.value("contentView");
-    if (contentView && !contentViewState.url.isEmpty()) {
-      contentView->loadWebContent(contentViewState.url);
-    } else if (contentView && !contentViewState.filePath.isEmpty()) {
-      contentView->loadFile(contentViewState.filePath);
+    const auto &contentViewState = windowStates.value("contentView");
+    if (contentView && contentViewState.isVisible) {
+      // Restore tabs
+      contentView->restoreTabStates(contentViewState.tabStates);
+
+      // Restore dock state
+      if (auto dock = dockManager->getDockWidget(
+              DockManager::DockWidgetType::ContentView)) {
+        dock->setVisible(true);
+        if (!contentViewState.geometry.isEmpty()) {
+          dock->restoreGeometry(contentViewState.geometry);
+        }
+      }
     }
   }
 

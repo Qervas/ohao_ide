@@ -9,11 +9,19 @@
 class ContentView : public QWidget {
   Q_OBJECT
 public:
+  struct TabState {
+    QString type;     // "web" or "file"
+    QString url;      // For web content
+    QString filePath; // For file preview
+    QString title;    // Tab title
+  };
   explicit ContentView(QWidget *parent = nullptr);
   void loadFile(const QString &filePath);
   void loadWebContent(const QString &url);
   QString getCurrentUrl() const;
   QString getCurrentFilePath() const;
+  QList<TabState> getTabStates() const;
+  void restoreTabStates(const QList<TabState> &states);
 
 protected:
   void resizeEvent(QResizeEvent *event) override;

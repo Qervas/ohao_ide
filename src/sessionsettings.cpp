@@ -49,6 +49,19 @@ void SessionSettings::saveSession(
     stateObj["filePath"] = it.value().filePath;
     stateObj["isVisible"] = it.value().isVisible;
     stateObj["geometry"] = QString(it.value().geometry.toBase64());
+
+    // Save tab states
+    QJsonArray tabStatesArray;
+    for (const auto &tabState : it.value().tabStates) {
+      QJsonObject tabObj;
+      tabObj["type"] = tabState.type;
+      tabObj["url"] = tabState.url;
+      tabObj["filePath"] = tabState.filePath;
+      tabObj["title"] = tabState.title;
+      tabStatesArray.append(tabObj);
+    }
+    stateObj["tabStates"] = tabStatesArray;
+
     windowStatesObj[it.key()] = stateObj;
   }
   sessionObj["windowStates"] = windowStatesObj;
@@ -108,7 +121,6 @@ void SessionSettings::loadSession(QStringList &openedFiles,
 
   // Load window states
   QJsonObject windowStatesObj = sessionObj["windowStates"].toObject();
-  windowStates.clear();
   for (auto it = windowStatesObj.constBegin(); it != windowStatesObj.constEnd();
        ++it) {
     QJsonObject stateObj = it.value().toObject();
@@ -118,6 +130,19 @@ void SessionSettings::loadSession(QStringList &openedFiles,
     state.isVisible = stateObj["isVisible"].toBool();
     state.geometry =
         QByteArray::fromBase64(stateObj["geometry"].toString().toLatin1());
+
+    // Load tab states
+    QJsonArray tabStatesArray = stateObj["tabStates"].toArray();
+    for (const auto &tabValue : tabStatesArray) {
+      QJsonObject tabObj = tabValue.toObject();
+      ContentView::TabState tabState;
+      tabState.type = tabObj["type"].toString();
+      tabState.url = tabObj["url"].toString();
+      tabState.filePath = tabObj["filePath"].toString();
+      tabState.title = tabObj["title"].toString();
+      state.tabStates.append(tabState);
+    }
+
     windowStates[it.key()] = state;
   }
 }
