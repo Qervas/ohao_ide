@@ -1,8 +1,10 @@
 # Ohao IDE
 
-A lightweight IDE with PDF/picture/web preview support.
+A lightweight IDE with PDF(dark mode))/picture/web preview support.
 
-![1736068844857](image/README/1736068844857.png)![1736072743777](image/README/1736072743777.png)
+![1736353910350](image/README/1736353910350.png)
+
+![1736072743777](image/README/1736072743777.png)
 
 ## Features
 

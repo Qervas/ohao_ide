@@ -1,5 +1,5 @@
 Name:           ohao-ide
-Version:        1.0.0
+Version:        1.0.2
 Release:        1%{?dist}
 Summary:        Ohao IDE - A lightweight IDE
 License:        MIT
@@ -62,5 +62,5 @@ desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{name}.desktop
 %license LICENSE
 
 %changelog
-* Wed Mar 20 2024 Your Name <your.email@example.com> - 1.0.0-1
-- Initial RPM release 
+* Wed Jan 08 2025 Qervas <djmax96945147@outlook.com> - 1.0.0-1
+- Initial RPM release, support dark mode
