@@ -41,6 +41,7 @@ private slots:
     void saveLayout();
     void loadLayout();
     void updateRecentProjectsMenu();
+    void showPreferences();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -59,6 +60,9 @@ private:
     void updateWindowTitle();
     bool maybeSave();
     void updateViewMenu();
+    void applyEditorSettings();
+    void saveSessionState();
+    void loadSessionState();
 
 
     ProjectTree *projectTree;
