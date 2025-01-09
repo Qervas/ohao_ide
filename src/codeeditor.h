@@ -19,8 +19,10 @@ private slots:
     void updateLineNumberAreaWidth(int newBlockCount);
     void highlightCurrentLine();
     void updateLineNumberArea(const QRect &rect, int dy);
+    void toggleLineComment();
 
 private:
     LineNumberArea *lineNumberArea;
     CppHighlighter *highlighter;
+    bool isLineCommented(const QString &text) const;
 }; 

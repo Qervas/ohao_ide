@@ -721,6 +721,7 @@ void MainWindow::showPreferences() {
     QSettings settings;
     settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
+    settings.setValue("editor/wordWrap", dialog.getWordWrap());
 
     // Apply settings to all open editors
     applyEditorSettings();
@@ -731,12 +732,14 @@ void MainWindow::applyEditorSettings() {
   QSettings settings;
   QFont font(settings.value("editor/fontFamily", "Monospace").toString(),
              settings.value("editor/fontSize", 11).toInt());
+  bool wordWrap = settings.value("editor/wordWrap", true).toBool();
 
   // Apply to all open editor tabs
   for (int i = 0; i < editorTabs->count(); ++i) {
     if (CodeEditor *editor =
             qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
       editor->setFont(font);
+      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
     }
   }
 }
