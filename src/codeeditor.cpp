@@ -3,6 +3,8 @@
 #include <QTextBlock>
 #include <QFontDatabase>
 #include <QSettings>
+#include <QShortcut>
+#include <QKeySequence>
 
 class LineNumberArea : public QWidget {
 public:
@@ -38,8 +40,9 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent)
     QFontMetrics metrics(font);
     setTabStopDistance(4 * metrics.horizontalAdvance(' '));
 
-    // Enable line wrapping
-    setLineWrapMode(QPlainTextEdit::NoWrap);
+    // Initialize word wrap from settings
+    bool wordWrap = settings.value("editor/wordWrap", true).toBool();
+    setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
 
     // Set modern colors
     QPalette p = palette();
@@ -57,6 +60,13 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent)
 
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
+
+    // Add comment toggle shortcut
+    QShortcut *commentShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Slash), this);
+    connect(commentShortcut, &QShortcut::activated, this, &CodeEditor::toggleLineComment);
+
+    // Set scroll bar policy
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 }
 
 int CodeEditor::lineNumberAreaWidth()
@@ -138,4 +148,68 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event)
         bottom = top + qRound(blockBoundingRect(block).height());
         ++blockNumber;
     }
-} 
+}
+
+void CodeEditor::toggleLineComment() {
+    QTextCursor cursor = textCursor();
+    QTextDocument *doc = document();
+    
+    // Get the range of selected text
+    int startBlock = cursor.selectionStart();
+    int endBlock = cursor.selectionEnd();
+    
+    cursor.beginEditBlock();
+    
+    // Convert positions to blocks
+    QTextBlock startBlockObj = doc->findBlock(startBlock);
+    QTextBlock endBlockObj = doc->findBlock(endBlock);
+    
+    // If selection ends at start of a block, don't include that block
+    if (endBlock > 0 && endBlock == endBlockObj.position()) {
+        endBlockObj = endBlockObj.previous();
+    }
+    
+    // Check if all selected lines are commented
+    bool allCommented = true;
+    QTextBlock block = startBlockObj;
+    while (block.isValid() && block.blockNumber() <= endBlockObj.blockNumber()) {
+        if (!isLineCommented(block.text())) {
+            allCommented = false;
+            break;
+        }
+        block = block.next();
+    }
+    
+    // Toggle comments for all selected lines
+    block = startBlockObj;
+    while (block.isValid() && block.blockNumber() <= endBlockObj.blockNumber()) {
+        cursor.setPosition(block.position());
+        QString text = block.text();
+        
+        if (allCommented) {
+            // Remove comment
+            if (isLineCommented(text)) {
+                cursor.movePosition(QTextCursor::StartOfLine);
+                cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 2);
+                cursor.removeSelectedText();
+                cursor.movePosition(QTextCursor::StartOfLine);
+            }
+        } else {
+            // Add comment
+            if (!isLineCommented(text)) {
+                cursor.movePosition(QTextCursor::StartOfLine);
+                cursor.insertText("//");
+            }
+        }
+        block = block.next();
+    }
+    
+    cursor.endEditBlock();
+}
+
+bool CodeEditor::isLineCommented(const QString &text) const {
+    QString trimmed = text.trimmed();
+    return trimmed.startsWith("//");
+}
+
+// Remove the toggleWordWrap() method 

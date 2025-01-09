@@ -79,6 +79,7 @@ void MainWindow::setupUI() {
           &MainWindow::closeTab);
 
   // Connect project tree signals
+  connect(projectTree, &ProjectTree::folderOpened, this, &MainWindow::setInitialDirectory);
   connect(projectTree, &ProjectTree::fileSelected, this,
           &MainWindow::handleFileSelected);
   connect(projectTree, &ProjectTree::directoryChanged, this,
@@ -143,7 +144,12 @@ void MainWindow::createMenus() {
   openFolderAction->setShortcut(QKeySequence("Ctrl+K, Ctrl+O"));
   connect(openFolderAction, &QAction::triggered, this, &MainWindow::openFolder);
 
-  fileMenu->addSeparator();
+  // Add "Close Folder" action to File menu after "Open Folder"
+  QAction *closeFolderAction = fileMenu->addAction(tr("Close Folder"));
+  closeFolderAction->setShortcut(QKeySequence("Ctrl+Shift+W"));
+  connect(closeFolderAction, &QAction::triggered, this, &MainWindow::closeFolder);
+
+  fileMenu->addSeparator();  // Add separator after Close Folder
 
   QAction *saveAction = fileMenu->addAction(tr("&Save"));
   saveAction->setShortcut(QKeySequence::Save);
@@ -238,10 +244,21 @@ void MainWindow::createMenus() {
   QMenu *helpMenu = menuBar->addMenu(tr("&Help"));
   helpMenu->addAction(tr("&About"), this, &MainWindow::about);
 
-  // Add Recent Projects submenu to File menu
+  // Create Recent Projects submenu
   recentProjectsMenu = new QMenu(tr("Recent Projects"), this);
-  fileMenu->insertMenu(fileMenu->actions().at(3),
-                       recentProjectsMenu); // Insert after Open Folder
+  fileMenu->insertMenu(closeFolderAction, recentProjectsMenu);  // Insert before Close Folder
+  
+  // Add Clear Recent Projects action
+  recentProjectsMenu->addSeparator();
+  QAction *clearRecentAction = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
+  connect(clearRecentAction, &QAction::triggered, this, [this]() {
+      recentProjects.clear();
+      QSettings settings;
+      settings.setValue("recentProjects", recentProjects);
+      updateRecentProjectsMenu();
+      welcomeView->updateRecentProjects(recentProjects);
+  });
+
   updateRecentProjectsMenu();
 
   // Settings menu
@@ -387,6 +404,17 @@ void MainWindow::createStatusBar() {
 void MainWindow::loadSettings() {
   QSettings settings;
   recentProjects = settings.value("recentProjects").toStringList();
+  
+  // Clean up non-existent paths
+  recentProjects.erase(
+      std::remove_if(recentProjects.begin(), recentProjects.end(),
+          [](const QString &path) { return !QFileInfo(path).exists(); }),
+      recentProjects.end()
+  );
+  
+  // Update UI
+  updateRecentProjectsMenu();
+  welcomeView->updateRecentProjects(recentProjects);
 
   // Load window state and geometry if you want to restore last session
   if (settings.contains("windowGeometry")) {
@@ -440,19 +468,30 @@ void MainWindow::setInitialDirectory(const QString &path) {
     return;
   }
 
+  // Save current session if needed
+  if (!projectPath.isEmpty()) {
+    saveSettings();
+  }
+
   projectTree->setRootPath(path);
   projectPath = path;
 
   // Update recent projects list
-  recentProjects.removeAll(path);
-  recentProjects.prepend(path);
+  recentProjects.removeAll(path);  // Remove if exists
+  recentProjects.prepend(path);    // Add to front
   while (recentProjects.size() > 10) {
     recentProjects.removeLast();
   }
+
+  // Save settings immediately
+  QSettings settings;
+  settings.setValue("recentProjects", recentProjects);
+  
+  // Update UI
   updateRecentProjectsMenu();
   welcomeView->updateRecentProjects(recentProjects);
 
-  // Switch from welcome view to editor view
+  // Switch from welcome view if needed
   if (centralWidget() == welcomeView) {
     welcomeView->setParent(nullptr);
     setCentralWidget(editorTabs);
@@ -460,6 +499,9 @@ void MainWindow::setInitialDirectory(const QString &path) {
 
   // Show project tree
   dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+  
+  // Update window title
+  setWindowTitle(QString("ohao IDE - %1").arg(QDir(path).dirName()));
 }
 
 void MainWindow::handleFileSelected(const QString &filePath) {
@@ -539,7 +581,9 @@ void MainWindow::openFile() {
     loadFile(fileName);
 }
 
-void MainWindow::openFolder() { projectTree->openFolder(); }
+void MainWindow::openFolder() {
+  projectTree->openFolder();
+}
 
 void MainWindow::loadFile(const QString &filePath) {
   QFileInfo fileInfo(filePath);
@@ -694,24 +738,35 @@ void MainWindow::about() {
 void MainWindow::updateRecentProjectsMenu() {
   recentProjectsMenu->clear();
 
-  for (const QString &project : recentProjects) {
-    QAction *action = recentProjectsMenu->addAction(QDir(project).dirName());
-    action->setData(project);
-    action->setToolTip(project);
-    connect(action, &QAction::triggered, this,
-            [this, project]() { setInitialDirectory(project); });
+  for (const QString &path : recentProjects) {
+    QFileInfo fileInfo(path);
+    if (fileInfo.exists()) {
+      QString displayName = fileInfo.fileName();  // Show folder name
+      QAction *action = recentProjectsMenu->addAction(displayName);
+      action->setData(path);  // Store full path
+      action->setToolTip(path);  // Show full path on hover
+      connect(action, &QAction::triggered, this, [this, path]() {
+        setInitialDirectory(path);
+      });
+    }
   }
 
   if (!recentProjects.isEmpty()) {
     recentProjectsMenu->addSeparator();
-    QAction *clearAction =
-        recentProjectsMenu->addAction(tr("Clear Recent Projects"));
-    connect(clearAction, &QAction::triggered, this, [this]() {
-      recentProjects.clear();
-      updateRecentProjectsMenu();
-      saveSettings();
-    });
   }
+  
+  // Add Clear Recent Projects action
+  QAction *clearRecentAction = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
+  connect(clearRecentAction, &QAction::triggered, this, [this]() {
+    recentProjects.clear();
+    QSettings settings;
+    settings.setValue("recentProjects", recentProjects);
+    updateRecentProjectsMenu();
+    welcomeView->updateRecentProjects(recentProjects);
+  });
+
+  // Update menu enabled state
+  recentProjectsMenu->setEnabled(!recentProjects.isEmpty());
 }
 
 void MainWindow::showPreferences() {
@@ -721,6 +776,7 @@ void MainWindow::showPreferences() {
     QSettings settings;
     settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
+    settings.setValue("editor/wordWrap", dialog.getWordWrap());
 
     // Apply settings to all open editors
     applyEditorSettings();
@@ -731,12 +787,14 @@ void MainWindow::applyEditorSettings() {
   QSettings settings;
   QFont font(settings.value("editor/fontFamily", "Monospace").toString(),
              settings.value("editor/fontSize", 11).toInt());
+  bool wordWrap = settings.value("editor/wordWrap", true).toBool();
 
   // Apply to all open editor tabs
   for (int i = 0; i < editorTabs->count(); ++i) {
     if (CodeEditor *editor =
             qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
       editor->setFont(font);
+      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
     }
   }
 }
@@ -836,4 +894,31 @@ void MainWindow::loadSessionState() {
   if (!mainWindowState.isEmpty()) {
     restoreState(mainWindowState);
   }
+}
+
+void MainWindow::closeFolder() {
+  // Save current session state before closing
+  saveSettings();
+  
+  // Clear current project path
+  projectPath.clear();
+  projectTree->setRootPath("");
+  
+  // Clear all editors
+  while (editorTabs->count() > 0) {
+    closeTab(0);
+  }
+  
+  // Switch back to welcome view
+  if (welcomeView) {
+    editorTabs->setParent(nullptr);
+    setCentralWidget(welcomeView);
+    welcomeView->updateRecentProjects(recentProjects);
+  }
+  
+  // Hide project tree
+  dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
+  
+  // Update window title
+  setWindowTitle("ohao IDE");
 }

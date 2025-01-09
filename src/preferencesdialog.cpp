@@ -6,10 +6,9 @@
 #include <QSettings>
 #include <QFontComboBox>
 #include <QGroupBox>
-#include <QSettings>
 #include <QSpinBox>
 #include <QGridLayout>
-
+#include <QCheckBox>
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(tr("Preferences"));
@@ -31,6 +30,10 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
     fontLayout->addWidget(new QLabel(tr("Size:")), 1, 0);
     fontLayout->addWidget(fontSizeSpinner, 1, 1);
 
+    // Word wrap option
+    wordWrapCheckBox = new QCheckBox(tr("Enable Word Wrap"), this);
+    fontLayout->addWidget(wordWrapCheckBox, 2, 0, 1, 2);
+
     mainLayout->addWidget(fontGroup);
 
     // Buttons
@@ -48,6 +51,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
     QSettings settings;
     fontFamilyCombo->setCurrentFont(QFont(settings.value("editor/fontFamily", "Monospace").toString()));
     fontSizeSpinner->setValue(settings.value("editor/fontSize", 11).toInt());
+    wordWrapCheckBox->setChecked(settings.value("editor/wordWrap", true).toBool());
 
     // Connect buttons
     connect(okButton, &QPushButton::clicked, this, &QDialog::accept);

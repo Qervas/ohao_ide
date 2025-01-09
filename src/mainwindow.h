@@ -42,6 +42,7 @@ private slots:
     void loadLayout();
     void updateRecentProjectsMenu();
     void showPreferences();
+    void closeFolder();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
