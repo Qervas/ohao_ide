@@ -1,6 +1,7 @@
 #ifndef FILEPREVIEW_H
 #define FILEPREVIEW_H
 
+#include "invertedpdfview.h"
 #include <QAbstractItemModel>
 #include <QComboBox>
 #include <QLabel>
@@ -9,7 +10,7 @@
 #include <QPdfDocument>
 #include <QPdfPageNavigator>
 #include <QPdfSearchModel>
-#include "invertedpdfview.h"
+#include <QSettings>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -39,6 +40,7 @@ private slots:
   void updatePageInfo();
   void zoomIn();
   void zoomOut();
+  void handleZoom(qreal factor);
 
 private:
   // Core widgets
@@ -75,12 +77,21 @@ private:
   void toggleDarkMode();
   void updatePdfDarkMode();
 
+  QSettings settings;
+  qreal customZoomFactor;
+  static constexpr qreal DEFAULT_ZOOM_FACTOR = 1.2;
+
+  static constexpr qreal ZOOM_FACTOR = 1.2;
+  static constexpr qreal MIN_ZOOM = 0.1;
+  static constexpr qreal MAX_ZOOM = 5.0;
+
   void setupUI();
   void setupPDFTools();
   void loadPDF(const QString &filePath);
   void loadImage(const QString &filePath);
   void searchDocument(bool forward = true);
   void updateImageDisplay();
+  void updateZoomComboText(qreal zoomFactor);
 };
 
 #endif // FILEPREVIEW_H
