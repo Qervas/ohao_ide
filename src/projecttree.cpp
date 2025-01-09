@@ -11,12 +11,15 @@
 #include <QUrl>
 #include <qshortcut.h>
 #include <QMouseEvent>
+#include <QTimer>
+#include <QDirIterator>
 
 
 ProjectTree::ProjectTree(QWidget *parent) : QTreeView(parent) {
     setupFileSystemModel();
     setupTreeView();
     setupContextMenus();
+    setupFileWatcher();
     model->setRootPath("");
     setRootIndex(model->index(""));
     // Add F2 shortcut for rename
@@ -31,8 +34,8 @@ ProjectTree::ProjectTree(QWidget *parent) : QTreeView(parent) {
 void ProjectTree::setupFileSystemModel() {
     model = new QFileSystemModel(this);
 
-    // Set filters for showing all relevant files
-    model->setFilter(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
+    // Set filters to show all files and directories
+    model->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
 
     // Set name filters but don't hide the filtered ones (just gray them out)
     model->setNameFilterDisables(false);
@@ -136,6 +139,9 @@ void ProjectTree::setRootPath(const QString &path) {
     currentRootPath = path;
     QModelIndex index = model->setRootPath(path);
     setRootIndex(index);
+
+    // Set up file system watching for the new root path
+    watchDirectory(path);
 
     // Expand the root item
     expand(index);
@@ -311,6 +317,9 @@ void ProjectTree::copyRelativePath() {
 
 QStringList ProjectTree::getDefaultFilters() const {
     return QStringList{
+        // Show all files without extension
+        "*",
+
         // C/C++ files
         "*.c", "*.cpp", "*.cxx", "*.cc",
         "*.h", "*.hpp", "*.hxx", "*.hh",
@@ -318,8 +327,12 @@ QStringList ProjectTree::getDefaultFilters() const {
 
         // Build files
         "CMakeLists.txt", "*.cmake",
-        "Makefile", "*.mk",
+        "Makefile*", "makefile*", "*.mk",
         "*.pro", "*.pri",
+
+        // Common script files without extension
+        "configure", "README", "LICENSE", "Dockerfile",
+        "Makefile", "makefile",
 
         // Web development
         "*.html", "*.css", "*.js", "*.ts",
@@ -335,6 +348,7 @@ QStringList ProjectTree::getDefaultFilters() const {
         // Data files
         "*.json", "*.xml", "*.yaml", "*.yml",
         "*.csv", "*.ini", "*.conf",
+        "*.env", ".env*", "*.lock",
 
         // Images
         "*.png", "*.jpg", "*.jpeg", "*.gif",
@@ -342,6 +356,65 @@ QStringList ProjectTree::getDefaultFilters() const {
 
         // Shell scripts
         "*.sh", "*.bash", "*.zsh",
-        "*.bat", "*.cmd", "*.ps1"
+        "*.bat", "*.cmd", "*.ps1",
+
+        // Version control
+        ".gitignore", ".gitattributes", ".gitmodules",
+        ".hgignore", ".svnignore",
+
+        // Hidden configuration files
+        ".*",
+        
+        // Generic binary files
+        "*.bin", "*.exe", "*.dll", "*.so", "*.dylib",
+        "*.out", "*.app"
     };
+}
+
+void ProjectTree::setupFileWatcher() {
+    fsWatcher = new QFileSystemWatcher(this);
+    connect(fsWatcher, &QFileSystemWatcher::directoryChanged,
+            this, &ProjectTree::handleDirectoryChange);
+    connect(fsWatcher, &QFileSystemWatcher::fileChanged,
+            this, &ProjectTree::handleFileChange);
+}
+
+void ProjectTree::watchDirectory(const QString &path) {
+    if (path.isEmpty()) return;
+
+    // Remove old watches
+    if (!fsWatcher->directories().isEmpty()) {
+        fsWatcher->removePaths(fsWatcher->directories());
+    }
+    if (!fsWatcher->files().isEmpty()) {
+        fsWatcher->removePaths(fsWatcher->files());
+    }
+
+    // Add new watch for the directory
+    fsWatcher->addPath(path);
+
+    // Watch all subdirectories
+    QDir dir(path);
+    QDirIterator it(path, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QString subDir = it.next();
+        fsWatcher->addPath(subDir);
+    }
+}
+
+void ProjectTree::handleDirectoryChange(const QString &path) {
+    // Use a small delay to batch multiple rapid changes
+    QTimer::singleShot(100, this, &ProjectTree::refreshCurrentDirectory);
+}
+
+void ProjectTree::handleFileChange(const QString &path) {
+    // Handle file changes if needed
+    refreshCurrentDirectory();
+}
+
+void ProjectTree::refreshCurrentDirectory() {
+    if (!currentRootPath.isEmpty()) {
+        model->setRootPath(QString()); // Force refresh
+        model->setRootPath(currentRootPath);
+    }
 }

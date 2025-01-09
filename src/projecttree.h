@@ -3,6 +3,7 @@
 #include <QFileSystemModel>
 #include <QMenu>
 #include <QStringList>
+#include <QFileSystemWatcher>
 
 class ProjectTree : public QTreeView {
     Q_OBJECT
@@ -33,6 +34,9 @@ private slots:
     void openContainingFolder();
     void copyFilePath();
     void copyRelativePath();
+    void handleDirectoryChange(const QString &path);
+    void handleFileChange(const QString &path);
+    void refreshCurrentDirectory();
 
 private:
     QFileSystemModel *model;
@@ -40,11 +44,14 @@ private:
     QMenu *fileContextMenu;
     QMenu *folderContextMenu;
     QString currentRootPath;
+    QFileSystemWatcher *fsWatcher;
 
     void setupFileSystemModel();
     void setupTreeView();
     void setupContextMenus();
+    void setupFileWatcher();
     QStringList getDefaultFilters() const;
     QString getRelativePath(const QString &absolutePath) const;
     void createContextMenuActions(QMenu *menu, bool isFile);
+    void watchDirectory(const QString &path);
 };
