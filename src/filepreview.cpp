@@ -1,14 +1,15 @@
 #include "filepreview.h"
+#include "invertedpdfview.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPdfBookmarkModel>
 #include <QPdfDocument>
-#include <QPdfSelection>
 #include <QPdfSearchModel>
-#include "invertedpdfview.h"
+#include <QPdfSelection>
 #include <QShortcut>
 #include <QSpinBox>
 #include <QSplitter>
@@ -25,13 +26,16 @@
 using Role = QPdfBookmarkModel::Role;
 
 FilePreview::FilePreview(QWidget *parent)
-    : QWidget(parent), isDarkMode(false) {
+    : QWidget(parent), isDarkMode(false), settings("ohao", "ohao_IDE") {
+  customZoomFactor =
+      settings.value("zoom_factor", DEFAULT_ZOOM_FACTOR).toDouble();
   setupUI();
+  if (pdfView) {
+    pdfView->setCustomZoomFactor(customZoomFactor);
+  }
 }
 
-FilePreview::~FilePreview() {
-  cleanup();
-}
+FilePreview::~FilePreview() { cleanup(); }
 
 void FilePreview::cleanup() {
   if (searchModel) {
@@ -95,23 +99,25 @@ void FilePreview::setupUI() {
 
   mainLayout->addWidget(mainSplitter);
 
-  // Zoom shortcuts
-  QShortcut *zoomInShortcut = new QShortcut(QKeySequence::ZoomIn, this);
-  connect(zoomInShortcut, &QShortcut::activated, this, &FilePreview::zoomIn);
+  // Setup zoom shortcuts
+  QList<QKeySequence> zoomInSequences = {
+      QKeySequence::ZoomIn, QKeySequence(Qt::CTRL | Qt::Key_Plus),
+      QKeySequence(Qt::CTRL | Qt::Key_Equal) // Additional common shortcut
+  };
 
-  QShortcut *zoomOutShortcut = new QShortcut(QKeySequence::ZoomOut, this);
-  connect(zoomOutShortcut, &QShortcut::activated, this, &FilePreview::zoomOut);
+  QList<QKeySequence> zoomOutSequences = {
+      QKeySequence::ZoomOut, QKeySequence(Qt::CTRL | Qt::Key_Minus)};
 
-  // Additional Ctrl++ and Ctrl+- shortcuts
-  QShortcut *zoomInPlusShortcut =
-      new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus), this);
-  connect(zoomInPlusShortcut, &QShortcut::activated,
-          this, &FilePreview::zoomIn);
+  for (const auto &sequence : zoomInSequences) {
+    QShortcut *zoomInShortcut = new QShortcut(sequence, this);
+    connect(zoomInShortcut, &QShortcut::activated, this, &FilePreview::zoomIn);
+  }
 
-  QShortcut *zoomOutMinusShortcut =
-      new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus), this);
-  connect(zoomOutMinusShortcut, &QShortcut::activated,
-          this, &FilePreview::zoomOut);
+  for (const auto &sequence : zoomOutSequences) {
+    QShortcut *zoomOutShortcut = new QShortcut(sequence, this);
+    connect(zoomOutShortcut, &QShortcut::activated, this,
+            &FilePreview::zoomOut);
+  }
 
   // Connect signals
   connect(bookmarkView, &QTreeView::clicked, this,
@@ -135,6 +141,35 @@ void FilePreview::setupUI() {
                 [this]() { handleZoomChange(zoomCombo->currentIndex() + 1); });
   new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus), this,
                 [this]() { handleZoomChange(zoomCombo->currentIndex() - 1); });
+
+  // Setup zoom combo box
+  zoomCombo = new QComboBox(this);
+  zoomCombo->setEditable(true); // Make it editable
+  zoomCombo->setInsertPolicy(
+      QComboBox::NoInsert); // Don't add typed text to list
+  zoomCombo->lineEdit()->setAlignment(Qt::AlignCenter); // Center the text
+  zoomCombo->addItems(
+      {"25%", "50%", "75%", "100%", "125%", "150%", "200%", "400%"});
+  zoomCombo->setCurrentText("100%");
+  toolbar->addWidget(zoomCombo);
+
+  // Connect for manual text entry
+  connect(zoomCombo->lineEdit(), &QLineEdit::editingFinished, this, [this]() {
+    QString text = zoomCombo->currentText();
+    if (!text.endsWith('%'))
+      text += '%';
+    handleZoomChange(0); // Index doesn't matter for manual entry
+  });
+
+  // Connect for combo box selection
+  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &FilePreview::handleZoomChange);
+
+  // Connect PDF view zoom changes to update the combo box
+  connect(pdfView, &QPdfView::zoomFactorChanged, this, [this](qreal zoom) {
+    int percent = qRound(zoom * 100);
+    zoomCombo->setCurrentText(QString::number(percent) + "%");
+  });
 }
 
 void FilePreview::setupPDFTools() {
@@ -155,14 +190,6 @@ void FilePreview::setupPDFTools() {
       style()->standardIcon(QStyle::SP_ArrowRight), "Next Page");
   connect(nextPage, &QAction::triggered,
           [this]() { pageSpinBox->setValue(pageSpinBox->value() + 1); });
-
-  toolbar->addSeparator();
-
-  // Zoom controls
-  zoomCombo = new QComboBox(this);
-  zoomCombo->addItems({"50%", "75%", "100%", "125%", "150%", "200%", "300%"});
-  zoomCombo->setCurrentText("100%");
-  toolbar->addWidget(zoomCombo);
 
   toolbar->addSeparator();
 
@@ -193,20 +220,20 @@ void FilePreview::setupPDFTools() {
           &FilePreview::toggleDarkMode);
 
   // Connect signals
-  connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-          this, &FilePreview::handlePageChange);
+  connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+          &FilePreview::handlePageChange);
 
-  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-          this, &FilePreview::handleZoomChange);
+  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &FilePreview::handleZoomChange);
 
-  connect(searchEdit, &QLineEdit::returnPressed,
-          this, &FilePreview::handleSearch);
+  connect(searchEdit, &QLineEdit::returnPressed, this,
+          &FilePreview::handleSearch);
 
-  connect(searchPrev, &QAction::triggered,
-          this, &FilePreview::handleSearchPrev);
+  connect(searchPrev, &QAction::triggered, this,
+          &FilePreview::handleSearchPrev);
 
-  connect(searchNext, &QAction::triggered,
-          this, &FilePreview::handleSearchNext);
+  connect(searchNext, &QAction::triggered, this,
+          &FilePreview::handleSearchNext);
 }
 
 void FilePreview::loadFile(const QString &filePath) {
@@ -284,8 +311,8 @@ void FilePreview::updateImageDisplay() {
     return;
   }
   QSize scaledSize = originalPixmap.size() * currentZoomFactor;
-  QPixmap scaledPixmap = originalPixmap.scaled(
-      scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  QPixmap scaledPixmap = originalPixmap.scaled(scaledSize, Qt::KeepAspectRatio,
+                                               Qt::SmoothTransformation);
   imageLabel->setPixmap(scaledPixmap);
 }
 
@@ -294,26 +321,26 @@ void FilePreview::resizeEvent(QResizeEvent *event) {
   updateImageDisplay();
 }
 
-void FilePreview::zoomIn() {
-  if (stack->currentWidget() == imageLabel) {
-    currentZoomFactor *= 1.2;
-    updateImageDisplay();
-  } else if (pdfView && stack->currentWidget() == pdfView) {
-    int currentIndex = zoomCombo->currentIndex();
-    if (currentIndex < zoomCombo->count() - 1) {
-      handleZoomChange(currentIndex + 1);
-    }
-  }
-}
+void FilePreview::zoomIn() { handleZoom(ZOOM_FACTOR); }
 
-void FilePreview::zoomOut() {
+void FilePreview::zoomOut() { handleZoom(1.0 / ZOOM_FACTOR); }
+
+void FilePreview::handleZoom(qreal factor) {
   if (stack->currentWidget() == imageLabel) {
-    currentZoomFactor *= 0.8;
-    updateImageDisplay();
-  } else if (pdfView && stack->currentWidget() == pdfView) {
-    int currentIndex = zoomCombo->currentIndex();
-    if (currentIndex > 0) {
-      handleZoomChange(currentIndex - 1);
+    qreal newZoom = currentZoomFactor * factor;
+    if (newZoom >= MIN_ZOOM && newZoom <= MAX_ZOOM) {
+      currentZoomFactor = newZoom;
+      updateImageDisplay();
+      updateZoomComboText(currentZoomFactor);
+    }
+  } else if (stack->currentWidget() == pdfView) {
+    qreal currentZoom = pdfView->zoomFactor();
+    qreal newZoom = currentZoom * factor;
+
+    if (newZoom >= MIN_ZOOM && newZoom <= MAX_ZOOM) {
+      pdfView->setZoomMode(QPdfView::ZoomMode::Custom);
+      pdfView->setZoomFactor(newZoom);
+      updateZoomComboText(newZoom);
     }
   }
 }
@@ -329,18 +356,28 @@ void FilePreview::handlePageChange(int page) {
   }
 }
 
-void FilePreview::handleZoomChange(int index) {
-  if (index < 0 || index >= zoomCombo->count()) {
+void FilePreview::handleZoomChange(int) { // Index parameter not needed
+  QString text = zoomCombo->currentText();
+  text.remove('%'); // Remove '%' if present
+  bool ok;
+  int percent = text.toInt(&ok);
+  if (!ok)
     return;
-  }
-  QString zoomText = zoomCombo->itemText(index);
-  zoomText.chop(1); // Remove '%'
-  qreal zoomFactor = zoomText.toDouble() / 100.0;
 
-  if (auto navigator = pdfView->pageNavigator()) {
-    navigator->update(navigator->currentPage(),
-                      navigator->currentLocation(),
-                      zoomFactor);
+  qreal factor = percent / 100.0;
+  if (factor >= MIN_ZOOM && factor <= MAX_ZOOM) {
+    if (stack->currentWidget() == imageLabel) {
+      currentZoomFactor = factor;
+      updateImageDisplay();
+    } else if (stack->currentWidget() == pdfView) {
+      pdfView->setZoomMode(QPdfView::ZoomMode::Custom);
+      pdfView->setZoomFactor(factor);
+    }
+  }
+
+  // Ensure the text ends with %
+  if (!text.endsWith('%')) {
+    zoomCombo->setCurrentText(QString::number(percent) + "%");
   }
 }
 
@@ -359,13 +396,9 @@ void FilePreview::handleSearch() {
   }
 }
 
-void FilePreview::handleSearchNext() {
-  searchDocument(true);
-}
+void FilePreview::handleSearchNext() { searchDocument(true); }
 
-void FilePreview::handleSearchPrev() {
-  searchDocument(false);
-}
+void FilePreview::handleSearchPrev() { searchDocument(false); }
 
 void FilePreview::searchDocument(bool forward) {
   if (currentSearchText.isEmpty()) {
@@ -419,18 +452,18 @@ void FilePreview::updatePageInfo() {
 
   if (auto navigator = pdfView->pageNavigator()) {
     // Avoid duplicate connections
-    disconnect(navigator, &QPdfPageNavigator::currentPageChanged,
-               this, nullptr);
+    disconnect(navigator, &QPdfPageNavigator::currentPageChanged, this,
+               nullptr);
 
-    connect(navigator, &QPdfPageNavigator::currentPageChanged,
-            this, [this](int page) {
+    connect(navigator, &QPdfPageNavigator::currentPageChanged, this,
+            [this](int page) {
               pageSpinBox->blockSignals(true);
               pageSpinBox->setValue(page + 1);
               pageSpinBox->blockSignals(false);
             });
 
-    connect(navigator, &QPdfPageNavigator::currentZoomChanged,
-            this, [this](qreal zoom) {
+    connect(navigator, &QPdfPageNavigator::currentZoomChanged, this,
+            [this](qreal zoom) {
               int percent = int(zoom * 100);
               int idx = zoomCombo->findText(QString::number(percent) + "%");
               if (idx >= 0) {
@@ -441,29 +474,18 @@ void FilePreview::updatePageInfo() {
 }
 
 void FilePreview::wheelEvent(QWheelEvent *event) {
-  if (event->modifiers() & Qt::ControlModifier) {
-    if (stack->currentWidget() == imageLabel) {
-      // For images
-      qreal factor = (event->angleDelta().y() > 0) ? 1.1 : 0.9;
-      currentZoomFactor *= factor;
-      updateImageDisplay();
-    } else if (stack->currentWidget() == pdfView) {
-      // For PDFs
-      int idx = zoomCombo->currentIndex();
-      if (event->angleDelta().y() > 0) {
-        if (idx < zoomCombo->count() - 1) {
-          handleZoomChange(idx + 1);
-        }
-      } else {
-        if (idx > 0) {
-          handleZoomChange(idx - 1);
-        }
-      }
-    }
+  // Let the PDF view handle its own wheel events
+  if (stack->currentWidget() == pdfView) {
+    pdfView->handleWheelEvent(event);
+  } else if (event->modifiers() & Qt::ControlModifier) {
+    const int delta = event->angleDelta().y();
+    const qreal factor =
+        (delta > 0) ? customZoomFactor : 1.0 / customZoomFactor;
+    handleZoom(factor);
     event->accept();
-    return;
+  } else {
+    QWidget::wheelEvent(event);
   }
-  QWidget::wheelEvent(event);
 }
 
 void FilePreview::toggleDarkMode() {
@@ -484,4 +506,14 @@ void FilePreview::updatePdfDarkMode() {
   } else {
     // pdfView->setStyleSheet("");
   }
+}
+
+void FilePreview::updateZoomComboText(qreal zoomFactor) {
+  int percent = qRound(zoomFactor * 100);
+  QString zoomText = QString::number(percent) + "%";
+
+  // Block signals to prevent recursive calls
+  zoomCombo->blockSignals(true);
+  zoomCombo->setCurrentText(zoomText);
+  zoomCombo->blockSignals(false);
 }

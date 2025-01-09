@@ -7,31 +7,47 @@ CppHighlighter::CppHighlighter(QTextDocument *parent)
     keywordFormat.setForeground(QColor("#569CD6"));
     keywordFormat.setFontWeight(QFont::Bold);
     const QString keywordPatterns[] = {
-        // C++ keywords
+        // Control flow
+        QStringLiteral("\\bif\\b"), QStringLiteral("\\belse\\b"),
+        QStringLiteral("\\bwhile\\b"), QStringLiteral("\\bfor\\b"),
+        QStringLiteral("\\bdo\\b"), QStringLiteral("\\bswitch\\b"),
+        QStringLiteral("\\bcase\\b"), QStringLiteral("\\bdefault\\b"),
+        QStringLiteral("\\bbreak\\b"), QStringLiteral("\\bcontinue\\b"),
+        QStringLiteral("\\breturn\\b"), QStringLiteral("\\bgoto\\b"),
+        
+        // Object-oriented
         QStringLiteral("\\bclass\\b"), QStringLiteral("\\bconst\\b"),
         QStringLiteral("\\benum\\b"), QStringLiteral("\\bexplicit\\b"),
         QStringLiteral("\\bfriend\\b"), QStringLiteral("\\binline\\b"),
         QStringLiteral("\\bnamespace\\b"), QStringLiteral("\\boperator\\b"),
         QStringLiteral("\\bprivate\\b"), QStringLiteral("\\bprotected\\b"),
-        QStringLiteral("\\bpublic\\b"), QStringLiteral("\\bsignals\\b"),
-        QStringLiteral("\\bslots\\b"), QStringLiteral("\\bstatic\\b"),
+        QStringLiteral("\\bpublic\\b"), QStringLiteral("\\bstatic\\b"),
         QStringLiteral("\\bstruct\\b"), QStringLiteral("\\btemplate\\b"),
         QStringLiteral("\\btypedef\\b"), QStringLiteral("\\btypename\\b"),
         QStringLiteral("\\bunion\\b"), QStringLiteral("\\bvirtual\\b"),
-        QStringLiteral("\\bvolatile\\b"), QStringLiteral("\\bnoexcept\\b"),
-        QStringLiteral("\\bnullptr\\b"), QStringLiteral("\\bconstexpr\\b"),
-        QStringLiteral("\\bconcept\\b"), QStringLiteral("\\brequires\\b"),
+        QStringLiteral("\\bvolatile\\b"), QStringLiteral("\\bfinal\\b"),
+        QStringLiteral("\\boverride\\b"), QStringLiteral("\\bthis\\b"),
         
-        // Additional C++17/20 keywords
-        QStringLiteral("\\bco_await\\b"), QStringLiteral("\\bco_return\\b"),
-        QStringLiteral("\\bco_yield\\b"), QStringLiteral("\\bimport\\b"),
-        QStringLiteral("\\bmodule\\b"), QStringLiteral("\\bexport\\b"),
-        QStringLiteral("\\brequires\\b"), QStringLiteral("\\bconstraint\\b"),
-        QStringLiteral("\\bthreadlocal\\b"), QStringLiteral("\\bfinal\\b"),
-        QStringLiteral("\\boverride\\b"), QStringLiteral("\\bimport\\b"),
-        QStringLiteral("\\bexport\\b"), QStringLiteral("\\bmodule\\b"),
+        // Memory management
+        QStringLiteral("\\bnew\\b"), QStringLiteral("\\bdelete\\b"),
+        QStringLiteral("\\bnullptr\\b"),
         
-        // Qt-specific keywords
+        // Type conversion
+        QStringLiteral("\\bstatic_cast\\b"), QStringLiteral("\\bdynamic_cast\\b"),
+        QStringLiteral("\\bconst_cast\\b"), QStringLiteral("\\breinterpret_cast\\b"),
+        
+        // Exception handling
+        QStringLiteral("\\btry\\b"), QStringLiteral("\\bcatch\\b"),
+        QStringLiteral("\\bthrow\\b"), QStringLiteral("\\bnoexcept\\b"),
+        
+        // Modern C++ features
+        QStringLiteral("\\bconstexpr\\b"), QStringLiteral("\\bconcept\\b"),
+        QStringLiteral("\\brequires\\b"), QStringLiteral("\\bco_await\\b"),
+        QStringLiteral("\\bco_return\\b"), QStringLiteral("\\bco_yield\\b"),
+        QStringLiteral("\\bimport\\b"), QStringLiteral("\\bmodule\\b"),
+        QStringLiteral("\\bexport\\b"), QStringLiteral("\\bthreadlocal\\b"),
+        
+        // Qt-specific keywords (unchanged)
         QStringLiteral("\\bslot\\b"), QStringLiteral("\\bsignal\\b"),
         QStringLiteral("\\bemit\\b"), QStringLiteral("\\bQ_OBJECT\\b"),
         QStringLiteral("\\bQ_PROPERTY\\b"), QStringLiteral("\\bQ_SIGNALS\\b"),
@@ -80,6 +96,29 @@ CppHighlighter::CppHighlighter(QTextDocument *parent)
         HighlightingRule rule;
         rule.pattern = QRegularExpression(pattern);
         rule.format = smartPtrFormat;
+        highlightingRules.append(rule);
+    }
+
+    // Built-in types
+    QTextCharFormat builtInTypeFormat;
+    builtInTypeFormat.setForeground(QColor("#C586C0"));
+    builtInTypeFormat.setFontWeight(QFont::Bold);
+    const QString builtInTypes[] = {
+        QStringLiteral("\\bint\\b"),
+        QStringLiteral("\\bchar\\b"),
+        QStringLiteral("\\bbool\\b"),
+        QStringLiteral("\\bfloat\\b"),
+        QStringLiteral("\\bdouble\\b"),
+        QStringLiteral("\\bshort\\b"),
+        QStringLiteral("\\blong\\b"),
+        QStringLiteral("\\bvoid\\b"),
+        QStringLiteral("\\bunsigned\\b"),
+        QStringLiteral("\\bsigned\\b")
+    };
+    for (const QString &pattern : builtInTypes) {
+        HighlightingRule rule;
+        rule.pattern = QRegularExpression(pattern);
+        rule.format = builtInTypeFormat;
         highlightingRules.append(rule);
     }
 
@@ -163,4 +202,4 @@ void CppHighlighter::highlightBlock(const QString &text)
         setFormat(startIndex, commentLength, multiLineCommentFormat);
         startIndex = text.indexOf(commentStartExpression, startIndex + commentLength);
     }
-} 
+}
