@@ -19,12 +19,9 @@ BrowserView::BrowserView(QWidget *parent) : QWidget(parent) {
 
     // Use default profile for persistence
     profile = QWebEngineProfile::defaultProfile();
-
-    // Configure persistent storage
     profile->setPersistentStoragePath(dataPath + "/storage");
-    profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
-    profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
-    profile->setHttpCacheMaximumSize(100 * 1024 * 1024); // 100MB cache
+    profile->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
+    profile->setCachePath(dataPath + "/cache");
 
     // Configure profile settings
     profile->settings()->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
