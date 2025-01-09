@@ -128,6 +128,7 @@ void ProjectTree::openFolder(const QString &path) {
 
     if (!folderPath.isEmpty()) {
         setRootPath(folderPath);
+        emit folderOpened(folderPath);
     }
 }
 

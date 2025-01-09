@@ -18,6 +18,7 @@ signals:
     void fileSelected(const QString &filePath);
     void directoryChanged(const QString &path);
     void rootDirectoryChanged(const QString &path);
+    void folderOpened(const QString &path);
 
 protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
