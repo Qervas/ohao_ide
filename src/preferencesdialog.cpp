@@ -20,19 +20,24 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
     QGridLayout *fontLayout = new QGridLayout(fontGroup);
 
     // Font family
-    fontFamilyCombo = new QFontComboBox(this);
+    fontComboBox = new QFontComboBox(this);
+    fontComboBox->setFontFilters(QFontComboBox::MonospacedFonts);
     fontLayout->addWidget(new QLabel(tr("Font:")), 0, 0);
-    fontLayout->addWidget(fontFamilyCombo, 0, 1);
+    fontLayout->addWidget(fontComboBox, 0, 1);
 
     // Font size
-    fontSizeSpinner = new QSpinBox(this);
-    fontSizeSpinner->setRange(8, 72);
+    fontSizeSpinBox = new QSpinBox(this);
+    fontSizeSpinBox->setRange(6, 72);
     fontLayout->addWidget(new QLabel(tr("Size:")), 1, 0);
-    fontLayout->addWidget(fontSizeSpinner, 1, 1);
+    fontLayout->addWidget(fontSizeSpinBox, 1, 1);
 
     // Word wrap option
     wordWrapCheckBox = new QCheckBox(tr("Enable Word Wrap"), this);
     fontLayout->addWidget(wordWrapCheckBox, 2, 0, 1, 2);
+
+    // Intelligent indent setting
+    intelligentIndentCheckBox = new QCheckBox(tr("Enable intelligent indent"), this);
+    fontLayout->addWidget(intelligentIndentCheckBox, 3, 0, 1, 2);
 
     mainLayout->addWidget(fontGroup);
 
@@ -49,9 +54,10 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
 
     // Load current settings
     QSettings settings;
-    fontFamilyCombo->setCurrentFont(QFont(settings.value("editor/fontFamily", "Monospace").toString()));
-    fontSizeSpinner->setValue(settings.value("editor/fontSize", 11).toInt());
+    fontComboBox->setCurrentFont(QFont(settings.value("editor/fontFamily", "Monospace").toString()));
+    fontSizeSpinBox->setValue(settings.value("editor/fontSize", 11).toInt());
     wordWrapCheckBox->setChecked(settings.value("editor/wordWrap", true).toBool());
+    intelligentIndentCheckBox->setChecked(settings.value("editor/intelligentIndent", true).toBool());
 
     // Connect buttons
     connect(okButton, &QPushButton::clicked, this, &QDialog::accept);
@@ -59,9 +65,17 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent) {
 }
 
 int PreferencesDialog::getFontSize() const {
-    return fontSizeSpinner->value();
+    return fontSizeSpinBox->value();
 }
 
 QString PreferencesDialog::getFontFamily() const {
-    return fontFamilyCombo->currentFont().family();
+    return fontComboBox->currentFont().family();
+}
+
+bool PreferencesDialog::getWordWrap() const {
+    return wordWrapCheckBox->isChecked();
+}
+
+bool PreferencesDialog::getIntelligentIndent() const {
+    return intelligentIndentCheckBox->isChecked();
 }

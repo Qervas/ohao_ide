@@ -784,6 +784,7 @@ void MainWindow::showPreferences() {
     settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
     settings.setValue("editor/wordWrap", dialog.getWordWrap());
+    settings.setValue("editor/intelligentIndent", dialog.getIntelligentIndent());
 
     // Apply settings to all open editors
     applyEditorSettings();
@@ -795,13 +796,20 @@ void MainWindow::applyEditorSettings() {
   QFont font(settings.value("editor/fontFamily", "Monospace").toString(),
              settings.value("editor/fontSize", 11).toInt());
   bool wordWrap = settings.value("editor/wordWrap", true).toBool();
+  bool intelligentIndent = settings.value("editor/intelligentIndent", true).toBool();
 
   // Apply to all open editor tabs
   for (int i = 0; i < editorTabs->count(); ++i) {
-    if (CodeEditor *editor =
-            qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
+    if (CodeEditor *editor = qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
       editor->setFont(font);
       editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
+    }
+  }
+
+  // Apply to terminal
+  if (auto terminalDock = dockManager->getDockWidget(DockManager::DockWidgetType::Terminal)) {
+    if (auto terminal = qobject_cast<Terminal*>(terminalDock->widget())) {
+      terminal->setIntelligentIndent(intelligentIndent);
     }
   }
 }
@@ -1051,6 +1059,19 @@ void MainWindow::showShortcutsHelp() {
         "<p><b>Ctrl+O</b> - Open file</p>"
         "<p><b>Ctrl+K, Ctrl+O</b> - Open folder</p>"
         "<p><b>Ctrl+Shift+W</b> - Close folder</p>"
+        "<br>"
+        "<h3>Search & Replace</h3>"
+        "<p><b>Ctrl+F</b> - Find</p>"
+        "<p><b>F3</b> - Find next</p>"
+        "<p><b>Shift+F3</b> - Find previous</p>"
+        "<p><b>Ctrl+H</b> - Replace</p>"
+        "<br>"
+        "<h3>Editor</h3>"
+        "<p><b>Tab</b> - Indent selection</p>"
+        "<p><b>Shift+Tab</b> - Unindent selection</p>"
+        "<p><b>Enter</b> - Smart new line (maintains indentation)</p>"
+        "<p><b>Backspace</b> - Smart backspace (removes entire indent level)</p>"
+        "<p><b>Ctrl+/</b> - Toggle line comment</p>"
     );
     label->setTextFormat(Qt::RichText);
     label->setWordWrap(true);

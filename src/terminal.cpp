@@ -5,7 +5,7 @@
 #include <QVBoxLayout>
 #include <qapplication.h>
 
-Terminal::Terminal(QWidget *parent) : DockWidgetBase(parent) { 
+Terminal::Terminal(QWidget *parent) : DockWidgetBase(parent), m_intelligentIndent(true) { 
     setupUI(); 
 }
 
@@ -140,6 +140,7 @@ void Terminal::closeTab(int index) {
 
 TerminalWidget *Terminal::createTerminal() {
   TerminalWidget *terminal = new TerminalWidget(this);
+  terminal->setIntelligentIndent(m_intelligentIndent);
   connect(terminal, &TerminalWidget::closeRequested, this, [this, terminal]() {
     int index = tabWidget->indexOf(terminal->parentWidget());
     if (index >= 0) {
@@ -178,4 +179,18 @@ TerminalWidget *Terminal::getCurrentTerminal() {
 
 void Terminal::createNewTerminalTab() {
     addNewTab();
+}
+
+void Terminal::setIntelligentIndent(bool enabled) {
+    m_intelligentIndent = enabled;
+    // Apply to all terminal widgets
+    for (int i = 0; i < tabWidget->count(); ++i) {
+        if (QSplitter *splitter = qobject_cast<QSplitter*>(tabWidget->widget(i))) {
+            for (int j = 0; j < splitter->count(); ++j) {
+                if (TerminalWidget *terminal = qobject_cast<TerminalWidget*>(splitter->widget(j))) {
+                    terminal->setIntelligentIndent(enabled);
+                }
+            }
+        }
+    }
 }
