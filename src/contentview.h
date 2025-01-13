@@ -1,12 +1,13 @@
 #pragma once
 #include "filepreview.h"
+#include "dockwidgetbase.h"
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QWebEngineView>
 #include <QWidget>
 
-class ContentView : public QWidget {
+class ContentView : public DockWidgetBase {
   Q_OBJECT
 public:
   struct TabState {
@@ -22,6 +23,11 @@ public:
   QString getCurrentFilePath() const;
   QList<TabState> getTabStates() const;
   void restoreTabStates(const QList<TabState> &states);
+  void closeCurrentTab() {
+    if (tabs->count() > 0) {
+      closeTab(tabs->currentIndex());
+    }
+  }
 
 protected:
   void resizeEvent(QResizeEvent *event) override;

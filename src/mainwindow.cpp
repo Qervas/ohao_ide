@@ -19,6 +19,9 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QShortcut>
+#include <QLabel>
+#include <QPushButton>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   // Create components
@@ -66,6 +69,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
   // Load session after everything is initialized
   QTimer::singleShot(0, this, &MainWindow::loadSessionState);
+
+  setupGlobalShortcuts();
+  setupFocusTracking();
 }
 
 void MainWindow::setupUI() {
@@ -242,6 +248,7 @@ void MainWindow::createMenus() {
 
   // Help menu
   QMenu *helpMenu = menuBar->addMenu(tr("&Help"));
+  helpMenu->addAction(tr("&Shortcuts"), this, &MainWindow::showShortcutsHelp);
   helpMenu->addAction(tr("&About"), this, &MainWindow::about);
 
   // Create Recent Projects submenu
@@ -921,4 +928,140 @@ void MainWindow::closeFolder() {
   
   // Update window title
   setWindowTitle("ohao IDE");
+}
+
+void MainWindow::setupGlobalShortcuts() {
+    // Focus shortcuts
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_1), this, this, &MainWindow::focusEditor);
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_0), this, this, &MainWindow::focusProjectTree);
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_QuoteLeft), this, this, &MainWindow::focusTerminal);
+    
+    // Global Ctrl+W and Ctrl+N
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this, this, &MainWindow::handleCtrlW);
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_N), this, this, &MainWindow::handleCtrlN);
+}
+
+void MainWindow::setupFocusTracking() {
+    qApp->installEventFilter(this);
+    connect(qApp, &QApplication::focusChanged, this, &MainWindow::handleFocusChange);
+}
+
+void MainWindow::handleFocusChange(QWidget *old, QWidget *now) {
+    if (now) {
+        currentFocusWidget = now;
+        // Update UI to show which panel is focused (optional)
+    }
+}
+
+void MainWindow::focusEditor() {
+    if (editorTabs && editorTabs->count() > 0) {
+        if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget())) {
+            editor->setFocus();
+        }
+    }
+}
+
+void MainWindow::focusProjectTree() {
+    if (projectTree) {
+        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+        projectTree->setFocus();
+    }
+}
+
+void MainWindow::focusTerminal() {
+    if (auto terminal = dockManager->getTerminalWidget()) {
+        dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, true);
+        terminal->setFocus();
+    }
+}
+
+void MainWindow::focusContentView() {
+    if (contentView) {
+        dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, true);
+        contentView->setFocus();
+    }
+}
+
+void MainWindow::handleCtrlW() {
+    // Handle close based on what's focused
+    if (!currentFocusWidget) return;
+
+    if (auto editor = qobject_cast<CodeEditor*>(currentFocusWidget)) {
+        closeTab(editorTabs->currentIndex());
+    }
+    else if (auto terminal = qobject_cast<TerminalWidget*>(currentFocusWidget)) {
+        terminal->close();
+    }
+    else if (auto browser = qobject_cast<BrowserView*>(currentFocusWidget)) {
+        if (contentView) {
+            contentView->closeCurrentTab();
+        }
+    }
+    else if (projectTree && projectTree->isAncestorOf(currentFocusWidget)) {
+        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
+    }
+}
+
+void MainWindow::handleCtrlN() {
+    // Handle new item based on what's focused
+    if (!currentFocusWidget) return;
+
+    if (qobject_cast<CodeEditor*>(currentFocusWidget)) {
+        createNewFile();
+    }
+    else if (qobject_cast<TerminalWidget*>(currentFocusWidget)) {
+        dockManager->createNewTerminal();
+    }
+    else if (qobject_cast<BrowserView*>(currentFocusWidget)) {
+        if (contentView) {
+            contentView->loadWebContent("https://www.google.com");
+        }
+    }
+}
+
+void MainWindow::showShortcutsHelp() {
+    QDialog *dialog = new QDialog(this);
+    dialog->setWindowTitle(tr("Keyboard Shortcuts"));
+    dialog->setMinimumWidth(400);
+
+    QVBoxLayout *layout = new QVBoxLayout(dialog);
+    
+    QLabel *label = new QLabel(dialog);
+    label->setText(
+        "<h3>Navigation</h3>"
+        "<p><b>Ctrl+1</b> - Focus editor</p>"
+        "<p><b>Ctrl+0</b> - Focus project tree</p>"
+        "<p><b>Ctrl+`</b> - Focus terminal</p>"
+        "<p><b>Ctrl+B</b> - Toggle project tree</p>"
+        "<p><b>Ctrl+Shift+B</b> - Open web browser</p>"
+        "<p><b>Ctrl+`</b> - Toggle terminal</p>"
+        "<br>"
+        "<h3>Tabs & Windows</h3>"
+        "<p><b>Ctrl+W</b> - Close current tab/panel (context-aware)</p>"
+        "<p><b>Ctrl+N</b> - New item (context-aware):</p>"
+        "<ul>"
+        "<li>Editor: New file</li>"
+        "<li>Terminal: New terminal</li>"
+        "<li>Browser: New browser tab</li>"
+        "</ul>"
+        "<br>"
+        "<h3>File Operations</h3>"
+        "<p><b>Ctrl+S</b> - Save file</p>"
+        "<p><b>Ctrl+Shift+S</b> - Save as</p>"
+        "<p><b>Ctrl+O</b> - Open file</p>"
+        "<p><b>Ctrl+K, Ctrl+O</b> - Open folder</p>"
+        "<p><b>Ctrl+Shift+W</b> - Close folder</p>"
+    );
+    label->setTextFormat(Qt::RichText);
+    label->setWordWrap(true);
+    
+    layout->addWidget(label);
+    
+    QPushButton *closeButton = new QPushButton(tr("Close"), dialog);
+    connect(closeButton, &QPushButton::clicked, dialog, &QDialog::accept);
+    layout->addWidget(closeButton, 0, Qt::AlignRight);
+
+    dialog->setLayout(layout);
+    dialog->exec();
+    delete dialog;
 }

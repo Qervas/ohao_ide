@@ -8,8 +8,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWebEngineView>
+#include <QShortcut>
 
-ContentView::ContentView(QWidget *parent) : QWidget(parent) { setupUI(); }
+ContentView::ContentView(QWidget *parent) : DockWidgetBase(parent) { setupUI(); }
 
 void ContentView::setupUI() {
   auto mainLayout = new QVBoxLayout(this);
@@ -29,6 +30,14 @@ void ContentView::setupUI() {
 
   // Connect close tab signal
   connect(tabs, &QTabWidget::tabCloseRequested, this, &ContentView::closeTab);
+
+  // Add Ctrl+W shortcut to close current tab
+  QShortcut *closeTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this);
+  connect(closeTabShortcut, &QShortcut::activated, this, [this]() {
+    if (tabs->count() > 0) {
+      closeTab(tabs->currentIndex());
+    }
+  });
 }
 
 void ContentView::loadFile(const QString &filePath) {
