@@ -7,9 +7,42 @@
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QVBoxLayout>
+#include <QClipboard>
+#include <QApplication>
+#include <QMenu>
+#include <QInputDialog>
+#include <QShortcut>
+#include <QWheelEvent>
+#include <QContextMenuEvent>
+
+// Define static color constants
+const QColor TerminalWidget::DefaultForeground = QColor("#F8F8F2");
+const QColor TerminalWidget::DefaultBackground = QColor("#282828");
+
+const QVector<QColor> TerminalWidget::AnsiColors = {
+    QColor("#000000"),  // Black
+    QColor("#CC0000"),  // Red
+    QColor("#4E9A06"),  // Green
+    QColor("#C4A000"),  // Yellow
+    QColor("#3465A4"),  // Blue
+    QColor("#75507B"),  // Magenta
+    QColor("#06989A"),  // Cyan
+    QColor("#D3D7CF")   // White
+};
+
+const QVector<QColor> TerminalWidget::AnsiBrightColors = {
+    QColor("#555753"),  // Bright Black
+    QColor("#EF2929"),  // Bright Red
+    QColor("#8AE234"),  // Bright Green
+    QColor("#FCE94F"),  // Bright Yellow
+    QColor("#729FCF"),  // Bright Blue
+    QColor("#AD7FA8"),  // Bright Magenta
+    QColor("#34E2E2"),  // Bright Cyan
+    QColor("#EEEEEC")   // Bright White
+};
 
 TerminalWidget::TerminalWidget(QWidget *parent)
-    : QWidget(parent), historyIndex(-1), promptPosition(0) {
+    : QWidget(parent), historyIndex(-1), promptPosition(0), baseFontSize(10), ctrlPressed(false) {
 
   username = qgetenv("USER");
   if (username.isEmpty()) {
@@ -19,6 +52,7 @@ TerminalWidget::TerminalWidget(QWidget *parent)
 
   setupUI();
   setupProcess();
+  setupShortcuts();
   setWorkingDirectory(QDir::homePath());
 }
 
@@ -29,36 +63,262 @@ void TerminalWidget::setupUI() {
 
   terminal = new QPlainTextEdit(this);
   terminal->setFrameStyle(QFrame::NoFrame);
-  terminal->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  terminal->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   terminal->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   terminal->setLineWrapMode(QPlainTextEdit::WidgetWidth);
   terminal->installEventFilter(this);
+  terminal->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(terminal, &QWidget::customContextMenuRequested,
+          this, [this](const QPoint &pos) { createContextMenu(pos); });
 
   // Set terminal font
   QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-  font.setPointSize(10);
+  font.setPointSize(baseFontSize);
   terminal->setFont(font);
 
   // Set modern terminal colors
   QPalette p = terminal->palette();
-  p.setColor(QPalette::Base, QColor("#282828")); // Darker background
-  p.setColor(QPalette::Text, QColor("#F8F8F2")); // Brighter text
+  p.setColor(QPalette::Base, DefaultBackground);
+  p.setColor(QPalette::Text, DefaultForeground);
   terminal->setPalette(p);
 
   // Style sheet for better appearance
-  terminal->setStyleSheet("QPlainTextEdit {"
-                          "   background-color: #282828;"
-                          "   color: #F8F8F2;"
-                          "   border: none;"
-                          "   padding: 4px;"
-                          "}"
-                          "QPlainTextEdit:focus {"
-                          "   border: none;"
-                          "   outline: none;"
-                          "}");
+  terminal->setStyleSheet(QString(
+      "QPlainTextEdit {"
+      "   background-color: %1;"
+      "   color: %2;"
+      "   border: none;"
+      "   padding: 4px;"
+      "}"
+      "QPlainTextEdit:focus {"
+      "   border: none;"
+      "   outline: none;"
+      "}"
+      "QScrollBar:vertical {"
+      "   background-color: #2A2A2A;"
+      "   width: 14px;"
+      "   margin: 0px;"
+      "}"
+      "QScrollBar::handle:vertical {"
+      "   background-color: #424242;"
+      "   min-height: 20px;"
+      "   border-radius: 7px;"
+      "   margin: 2px;"
+      "}"
+      "QScrollBar::handle:vertical:hover {"
+      "   background-color: #686868;"
+      "}"
+      "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+      "   height: 0px;"
+      "}"
+      "QScrollBar:horizontal {"
+      "   background-color: #2A2A2A;"
+      "   height: 14px;"
+      "   margin: 0px;"
+      "}"
+      "QScrollBar::handle:horizontal {"
+      "   background-color: #424242;"
+      "   min-width: 20px;"
+      "   border-radius: 7px;"
+      "   margin: 2px;"
+      "}"
+      "QScrollBar::handle:horizontal:hover {"
+      "   background-color: #686868;"
+      "}"
+      "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {"
+      "   width: 0px;"
+      "}")
+      .arg(DefaultBackground.name(), DefaultForeground.name()));
 
   layout->addWidget(terminal);
   displayPrompt();
+}
+
+void TerminalWidget::setupShortcuts() {
+    // Zoom shortcuts
+    new QShortcut(QKeySequence::ZoomIn, this, this, &TerminalWidget::zoomIn);
+    new QShortcut(QKeySequence::ZoomOut, this, this, &TerminalWidget::zoomOut);
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_0), this, this, &TerminalWidget::resetZoom);
+    
+    // Find shortcuts
+    new QShortcut(QKeySequence::Find, this, this, &TerminalWidget::find);
+    new QShortcut(QKeySequence::FindNext, this, this, &TerminalWidget::findNext);
+    new QShortcut(QKeySequence::FindPrevious, this, this, &TerminalWidget::findPrevious);
+    
+    // Copy/Paste shortcuts
+    new QShortcut(QKeySequence::Copy, this, this, &TerminalWidget::copySelectedText);
+    new QShortcut(QKeySequence::Paste, this, this, &TerminalWidget::pasteClipboard);
+}
+
+void TerminalWidget::contextMenuEvent(QContextMenuEvent *event) {
+    createContextMenu(event->globalPos());
+}
+
+void TerminalWidget::createContextMenu(const QPoint &pos) {
+    QMenu *menu = new QMenu(this);
+    
+    menu->addAction(tr("Copy"), this, &TerminalWidget::copySelectedText);
+    menu->addAction(tr("Paste"), this, &TerminalWidget::pasteClipboard);
+    menu->addSeparator();
+    menu->addAction(tr("Select All"), this, &TerminalWidget::selectAll);
+    menu->addSeparator();
+    menu->addAction(tr("Find..."), this, &TerminalWidget::find);
+    menu->addSeparator();
+    menu->addAction(tr("Clear Scrollback"), this, &TerminalWidget::clearScrollback);
+    
+    menu->exec(terminal->mapToGlobal(pos));
+    delete menu;
+}
+
+void TerminalWidget::wheelEvent(QWheelEvent *event) {
+    if (event->modifiers() & Qt::ControlModifier) {
+        handleZoom(event->angleDelta().y());
+        event->accept();
+    } else {
+        QWidget::wheelEvent(event);
+    }
+}
+
+void TerminalWidget::handleZoom(int delta) {
+    if (delta > 0) {
+        zoomIn();
+    } else {
+        zoomOut();
+    }
+}
+
+void TerminalWidget::zoomIn() {
+    setFontSize(terminal->font().pointSize() + 1);
+}
+
+void TerminalWidget::zoomOut() {
+    setFontSize(terminal->font().pointSize() - 1);
+}
+
+void TerminalWidget::resetZoom() {
+    setFontSize(baseFontSize);
+}
+
+void TerminalWidget::setFontSize(int size) {
+    if (size < 6 || size > 72) return;
+    
+    QFont font = terminal->font();
+    font.setPointSize(size);
+    terminal->setFont(font);
+    emit fontSizeChanged(size);
+}
+
+void TerminalWidget::find() {
+    bool ok;
+    QString text = QInputDialog::getText(this, tr("Find"),
+                                       tr("Search text:"), QLineEdit::Normal,
+                                       searchString, &ok);
+    if (ok && !text.isEmpty()) {
+        searchString = text;
+        findNext();
+    }
+}
+
+void TerminalWidget::findNext() {
+    if (searchString.isEmpty()) {
+        find();
+        return;
+    }
+    
+    QTextDocument *doc = terminal->document();
+    QTextCursor cursor = terminal->textCursor();
+    
+    QTextDocument::FindFlags flags;
+    QTextCursor found = doc->find(searchString, cursor, flags);
+    
+    if (found.isNull()) {
+        // Wrap around
+        cursor.movePosition(QTextCursor::Start);
+        found = doc->find(searchString, cursor, flags);
+    }
+    
+    if (!found.isNull()) {
+        terminal->setTextCursor(found);
+    }
+}
+
+void TerminalWidget::findPrevious() {
+    if (searchString.isEmpty()) {
+        find();
+        return;
+    }
+    
+    QTextDocument *doc = terminal->document();
+    QTextCursor cursor = terminal->textCursor();
+    
+    QTextDocument::FindFlags flags = QTextDocument::FindBackward;
+    QTextCursor found = doc->find(searchString, cursor, flags);
+    
+    if (found.isNull()) {
+        // Wrap around
+        cursor.movePosition(QTextCursor::End);
+        found = doc->find(searchString, cursor, flags);
+    }
+    
+    if (!found.isNull()) {
+        terminal->setTextCursor(found);
+    }
+}
+
+void TerminalWidget::copySelectedText() {
+    terminal->copy();
+}
+
+void TerminalWidget::pasteClipboard() {
+    const QClipboard *clipboard = QApplication::clipboard();
+    QString text = clipboard->text();
+    if (!text.isEmpty()) {
+        QStringList lines = text.split('\n');
+        for (int i = 0; i < lines.size(); ++i) {
+            setCurrentCommand(lines[i]);
+            if (i < lines.size() - 1) {
+                handleCommandExecution();
+            }
+        }
+    }
+}
+
+void TerminalWidget::selectAll() {
+    terminal->selectAll();
+}
+
+void TerminalWidget::clearScrollback() {
+    terminal->clear();
+    displayPrompt();
+}
+
+QColor TerminalWidget::getAnsiColor(int colorCode, bool bright) {
+    if (colorCode < 0 || colorCode > 7) {
+        return bright ? DefaultForeground : DefaultBackground;
+    }
+    return bright ? AnsiBrightColors[colorCode] : AnsiColors[colorCode];
+}
+
+QString TerminalWidget::getAnsiColorTable() {
+    return QString(
+        "\033[0m\033[K  Default                     "
+        "\033[1m  Bold\n\033[0m"
+        "\033[30m  Black                       "
+        "\033[1;30m  Bright Black\n\033[0m"
+        "\033[31m  Red                         "
+        "\033[1;31m  Bright Red\n\033[0m"
+        "\033[32m  Green                       "
+        "\033[1;32m  Bright Green\n\033[0m"
+        "\033[33m  Yellow                      "
+        "\033[1;33m  Bright Yellow\n\033[0m"
+        "\033[34m  Blue                        "
+        "\033[1;34m  Bright Blue\n\033[0m"
+        "\033[35m  Magenta                     "
+        "\033[1;35m  Bright Magenta\n\033[0m"
+        "\033[36m  Cyan                        "
+        "\033[1;36m  Bright Cyan\n\033[0m"
+        "\033[37m  White                       "
+        "\033[1;37m  Bright White\n\033[0m");
 }
 
 void TerminalWidget::setupProcess() {
@@ -466,95 +726,76 @@ void TerminalWidget::setWorkingDirectory(const QString &path) {
 }
 
 void TerminalWidget::appendFormattedOutput(const QString &text) {
-  QTextCursor cursor = terminal->textCursor();
-  cursor.movePosition(QTextCursor::End);
+    QTextCursor cursor = terminal->textCursor();
+    cursor.movePosition(QTextCursor::End);
 
-  QRegularExpression regex("\x1B\\[([0-9;]*)([A-Za-z])");
-  QRegularExpressionMatchIterator it = regex.globalMatch(text);
+    QRegularExpression regex("\x1B\\[([0-9;]*)([A-Za-z])");
+    QRegularExpressionMatchIterator it = regex.globalMatch(text);
 
-  int lastPos = 0;
-  while (it.hasNext()) {
-    QRegularExpressionMatch match = it.next();
-    QString before = text.mid(lastPos, match.capturedStart() - lastPos);
-    cursor.insertText(before);
+    int lastPos = 0;
+    QTextCharFormat currentFormat;
+    currentFormat.setForeground(DefaultForeground);
+    currentFormat.setBackground(DefaultBackground);
 
-    QString codes = match.captured(1);
-    QString command = match.captured(2);
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        QString before = text.mid(lastPos, match.capturedStart() - lastPos);
+        cursor.insertText(before, currentFormat);
 
-    if (command == "m") {
-      QStringList codeList = codes.split(';');
-      QTextCharFormat format = cursor.charFormat();
-      for (const QString &code : codeList) {
-        int codeInt = code.toInt();
-        switch (codeInt) {
-        case 0: // Reset
-          format = QTextCharFormat();
-          break;
-        case 1: // Bold
-          format.setFontWeight(QFont::Bold);
-          break;
-        case 30:
-          format.setForeground(QColor("#000000"));
-          break; // Black
-        case 31:
-          format.setForeground(QColor("#FF0000"));
-          break; // Red
-        case 32:
-          format.setForeground(QColor("#00FF00"));
-          break; // Green
-        case 33:
-          format.setForeground(QColor("#FFFF00"));
-          break; // Yellow
-        case 34:
-          format.setForeground(QColor("#0000FF"));
-          break; // Blue
-        case 35:
-          format.setForeground(QColor("#FF00FF"));
-          break; // Magenta
-        case 36:
-          format.setForeground(QColor("#00FFFF"));
-          break; // Cyan
-        case 37:
-          format.setForeground(QColor("#FFFFFF"));
-          break; // White
-        case 40:
-          format.setBackground(QColor("#000000"));
-          break; // Black background
-        case 41:
-          format.setBackground(QColor("#FF0000"));
-          break; // Red background
-        case 42:
-          format.setBackground(QColor("#00FF00"));
-          break; // Green background
-        case 43:
-          format.setBackground(QColor("#FFFF00"));
-          break; // Yellow background
-        case 44:
-          format.setBackground(QColor("#0000FF"));
-          break; // Blue background
-        case 45:
-          format.setBackground(QColor("#FF00FF"));
-          break; // Magenta background
-        case 46:
-          format.setBackground(QColor("#00FFFF"));
-          break; // Cyan background
-        case 47:
-          format.setBackground(QColor("#FFFFFF"));
-          break; // White background
-        // Add more cases as needed for other ANSI codes
-        default:
-          break;
+        QString codes = match.captured(1);
+        QString command = match.captured(2);
+
+        if (command == "m") {
+            QStringList codeList = codes.split(';');
+            for (const QString &code : codeList) {
+                int codeInt = code.toInt();
+                
+                if (codeInt == 0) {
+                    currentFormat = QTextCharFormat();
+                    currentFormat.setForeground(DefaultForeground);
+                    currentFormat.setBackground(DefaultBackground);
+                }
+                else if (codeInt == 1) {
+                    QFont font = currentFormat.font();
+                    font.setBold(true);
+                    currentFormat.setFont(font);
+                }
+                else if (codeInt == 2) {
+                    QFont font = currentFormat.font();
+                    font.setBold(false);
+                    currentFormat.setFont(font);
+                }
+                else if (codeInt == 3) {
+                    QFont font = currentFormat.font();
+                    font.setItalic(true);
+                    currentFormat.setFont(font);
+                }
+                else if (codeInt == 4) {
+                    QFont font = currentFormat.font();
+                    font.setUnderline(true);
+                    currentFormat.setFont(font);
+                }
+                else if (codeInt >= 30 && codeInt <= 37) {
+                    currentFormat.setForeground(getAnsiColor(codeInt - 30, false));
+                }
+                else if (codeInt >= 90 && codeInt <= 97) {
+                    currentFormat.setForeground(getAnsiColor(codeInt - 90, true));
+                }
+                else if (codeInt >= 40 && codeInt <= 47) {
+                    currentFormat.setBackground(getAnsiColor(codeInt - 40, false));
+                }
+                else if (codeInt >= 100 && codeInt <= 107) {
+                    currentFormat.setBackground(getAnsiColor(codeInt - 100, true));
+                }
+            }
         }
-      }
-      cursor.setCharFormat(format);
+
+        lastPos = match.capturedEnd();
     }
 
-    lastPos = match.capturedEnd();
-  }
+    QString remaining = text.mid(lastPos);
+    cursor.insertText(remaining, currentFormat);
 
-  QString remaining = text.mid(lastPos);
-  cursor.insertText(remaining);
-
-  terminal->setTextCursor(cursor);
-  terminal->ensureCursorVisible();
+    terminal->setTextCursor(cursor);
+    terminal->ensureCursorVisible();
 }
