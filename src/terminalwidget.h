@@ -10,9 +10,21 @@ class TerminalWidget : public QWidget {
 public:
   explicit TerminalWidget(QWidget *parent = nullptr);
   void setWorkingDirectory(const QString &path);
+  void setFontSize(int size);
+  void zoomIn();
+  void zoomOut();
+  void resetZoom();
+  void find();
+  void findNext();
+  void findPrevious();
 
 signals:
   void closeRequested();
+  void fontSizeChanged(int size);
+
+protected:
+  void contextMenuEvent(QContextMenuEvent *event) override;
+  void wheelEvent(QWheelEvent *event) override;
 
 private:
   QProcess *process;
@@ -24,6 +36,9 @@ private:
   int historyIndex;
   int promptPosition;
   QString previousWorkingDirectory;
+  QString searchString;
+  int baseFontSize;
+  bool ctrlPressed;
 
   void setupUI();
   void setupProcess();
@@ -46,6 +61,24 @@ private:
   QStringList getCompletions(const QString &prefix) const;
   void showCompletions(const QStringList &completions);
   void appendFormattedOutput(const QString &text);
+  void createContextMenu(const QPoint &pos);
+  void searchHistory(const QString &searchTerm);
+  void copySelectedText();
+  void pasteClipboard();
+  void selectAll();
+  void clearScrollback();
+  void handleZoom(int delta);
+  void updateFont();
+  void highlightSearchText();
+  void setupShortcuts();
+  static QColor getAnsiColor(int colorCode, bool bright = false);
+  static QString getAnsiColorTable();
+  
+  // Constants for ANSI colors
+  static const QColor DefaultForeground;
+  static const QColor DefaultBackground;
+  static const QVector<QColor> AnsiColors;
+  static const QVector<QColor> AnsiBrightColors;
 
 private slots:
   void onReadyReadStandardOutput();

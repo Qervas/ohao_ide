@@ -9,6 +9,8 @@
 #include "terminal.h"
 #include "dockmanager.h"
 #include "welcomeview.h"
+#include "browserview.h"
+#include "terminalwidget.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -17,6 +19,16 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     void setInitialDirectory(const QString &path);
     void loadFile(const QString &filePath);
+
+public slots:
+    void handleFocusChange(QWidget *old, QWidget *now);
+    void focusEditor();
+    void focusProjectTree();
+    void focusTerminal();
+    void focusContentView();
+    void handleCtrlW();
+    void handleCtrlN();
+    void showShortcutsHelp();
 
 private slots:
     void createNewFile();
@@ -78,4 +90,8 @@ private:
 
     // Actions for view menu
     QMap<DockManager::DockWidgetType, QAction*> viewActions;
+
+    QWidget* currentFocusWidget;
+    void setupGlobalShortcuts();
+    void setupFocusTracking();
 };

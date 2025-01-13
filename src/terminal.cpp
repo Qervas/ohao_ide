@@ -5,7 +5,27 @@
 #include <QVBoxLayout>
 #include <qapplication.h>
 
-Terminal::Terminal(QWidget *parent) : QWidget(parent) { setupUI(); }
+Terminal::Terminal(QWidget *parent) : DockWidgetBase(parent) { 
+    setupUI(); 
+}
+
+void Terminal::setWorkingDirectory(const QString &path) {
+    DockWidgetBase::setWorkingDirectory(path);
+    if (TerminalWidget *terminal = getCurrentTerminal()) {
+        terminal->setWorkingDirectory(path);
+    }
+}
+
+void Terminal::updateTheme() {
+    // Update theme-related properties
+    // This will be implemented when we add theme support
+}
+
+void Terminal::focusWidget() {
+    if (TerminalWidget *terminal = getCurrentTerminal()) {
+        terminal->setFocus();
+    }
+}
 
 void Terminal::setupUI() {
   QVBoxLayout *layout = new QVBoxLayout(this);
@@ -118,13 +138,6 @@ void Terminal::closeTab(int index) {
   }
 }
 
-void Terminal::setWorkingDirectory(const QString &path) {
-  currentWorkingDirectory = path;
-  if (TerminalWidget *terminal = getCurrentTerminal()) {
-    terminal->setWorkingDirectory(path);
-  }
-}
-
 TerminalWidget *Terminal::createTerminal() {
   TerminalWidget *terminal = new TerminalWidget(this);
   connect(terminal, &TerminalWidget::closeRequested, this, [this, terminal]() {
@@ -134,8 +147,8 @@ TerminalWidget *Terminal::createTerminal() {
     }
   });
 
-  if (!currentWorkingDirectory.isEmpty()) {
-    terminal->setWorkingDirectory(currentWorkingDirectory);
+  if (!m_workingDirectory.isEmpty()) {
+    terminal->setWorkingDirectory(m_workingDirectory);
   }
   return terminal;
 }
@@ -161,4 +174,8 @@ TerminalWidget *Terminal::getCurrentTerminal() {
 
   // If no terminal has focus, return the first one
   return qobject_cast<TerminalWidget *>(splitter->widget(0));
+}
+
+void Terminal::createNewTerminalTab() {
+    addNewTab();
 }

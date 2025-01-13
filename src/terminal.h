@@ -3,13 +3,22 @@
 #include <QTabWidget>
 #include <QSplitter>
 #include "terminalwidget.h"
+#include "dockwidgetbase.h"
 
-class Terminal : public QWidget {
+class Terminal : public DockWidgetBase {
     Q_OBJECT
 
 public:
     explicit Terminal(QWidget *parent = nullptr);
-    void setWorkingDirectory(const QString &path);
+    
+    // Override base class methods
+    void setWorkingDirectory(const QString &path) override;
+    bool canClose() override { return true; }
+    void updateTheme() override;
+    void focusWidget() override;
+
+    // Terminal specific methods
+    void createNewTerminalTab();
 
 private slots:
     void addNewTab();
@@ -21,7 +30,6 @@ private slots:
 private:
     QTabWidget *tabWidget;
     QList<QSplitter*> splitters;
-    QString currentWorkingDirectory;
 
     void setupUI();
     void createToolBar();

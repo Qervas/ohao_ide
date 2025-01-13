@@ -3,6 +3,8 @@
 #include <QDockWidget>
 #include <QMap>
 #include <QString>
+#include "terminal.h"
+#include "terminalwidget.h"
 
 class DockManager : public QObject {
     Q_OBJECT
@@ -42,6 +44,22 @@ public:
     QDockWidget* getDockWidget(DockWidgetType type) const;
     bool isDockVisible(DockWidgetType type) const;
     void setDockVisible(DockWidgetType type, bool visible);
+
+    TerminalWidget* getTerminalWidget() {
+        if (auto dock = getDockWidget(DockWidgetType::Terminal)) {
+            return qobject_cast<TerminalWidget*>(dock->widget());
+        }
+        return nullptr;
+    }
+
+    void createNewTerminal() {
+        if (auto dock = getDockWidget(DockWidgetType::Terminal)) {
+            auto terminal = qobject_cast<Terminal*>(dock->widget());
+            if (terminal) {
+                terminal->createNewTerminalTab();
+            }
+        }
+    }
 
 signals:
     void layoutChanged();
