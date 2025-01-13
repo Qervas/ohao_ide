@@ -17,6 +17,8 @@ public:
   void find();
   void findNext();
   void findPrevious();
+  void setIntelligentIndent(bool enabled);
+  bool intelligentIndentEnabled() const { return m_intelligentIndent; }
 
 signals:
   void closeRequested();
@@ -39,6 +41,7 @@ private:
   QString searchString;
   int baseFontSize;
   bool ctrlPressed;
+  bool m_intelligentIndent;
 
   void setupUI();
   void setupProcess();
@@ -58,6 +61,9 @@ private:
   void handleCtrlD();
   void handleCdCommand(const QString &command);
   void handleTabCompletion();
+  void handleIndent(bool indent);
+  QString getIndentString() const;
+  int getIndentLevel(const QString &text) const;
   QStringList getCompletions(const QString &prefix) const;
   void showCompletions(const QStringList &completions);
   void appendFormattedOutput(const QString &text);

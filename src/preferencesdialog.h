@@ -1,7 +1,7 @@
 #pragma once
 #include <QDialog>
-#include <QSpinBox>
 #include <QFontComboBox>
+#include <QSpinBox>
 #include <QCheckBox>
 
 class PreferencesDialog : public QDialog {
@@ -9,12 +9,15 @@ class PreferencesDialog : public QDialog {
 
 public:
     explicit PreferencesDialog(QWidget *parent = nullptr);
+
     int getFontSize() const;
     QString getFontFamily() const;
-    bool getWordWrap() const { return wordWrapCheckBox->isChecked(); }
+    bool getWordWrap() const;
+    bool getIntelligentIndent() const;
 
 private:
-    QSpinBox *fontSizeSpinner;
-    QFontComboBox *fontFamilyCombo;
+    QFontComboBox *fontComboBox;
+    QSpinBox *fontSizeSpinBox;
     QCheckBox *wordWrapCheckBox;
+    QCheckBox *intelligentIndentCheckBox;
 };

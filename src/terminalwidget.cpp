@@ -42,7 +42,8 @@ const QVector<QColor> TerminalWidget::AnsiBrightColors = {
 };
 
 TerminalWidget::TerminalWidget(QWidget *parent)
-    : QWidget(parent), historyIndex(-1), promptPosition(0), baseFontSize(10), ctrlPressed(false) {
+    : QWidget(parent), historyIndex(-1), promptPosition(0), baseFontSize(10), 
+      ctrlPressed(false), m_intelligentIndent(true) {
 
   username = qgetenv("USER");
   if (username.isEmpty()) {
@@ -148,6 +149,10 @@ void TerminalWidget::setupShortcuts() {
     // Copy/Paste shortcuts
     new QShortcut(QKeySequence::Copy, this, this, &TerminalWidget::copySelectedText);
     new QShortcut(QKeySequence::Paste, this, this, &TerminalWidget::pasteClipboard);
+
+    // Indent/Unindent shortcuts
+    new QShortcut(QKeySequence(Qt::Key_Tab), this, [this]() { handleIndent(true); });
+    new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this, [this]() { handleIndent(false); });
 }
 
 void TerminalWidget::contextMenuEvent(QContextMenuEvent *event) {
@@ -483,53 +488,85 @@ void TerminalWidget::handleCdCommand(const QString &command) {
 }
 
 bool TerminalWidget::eventFilter(QObject *obj, QEvent *event) {
-  if (obj == terminal && event->type() == QEvent::KeyPress) {
-    QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+    if (obj == terminal && event->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
 
-    // Handle control key combinations
-    if (keyEvent->modifiers() & Qt::ControlModifier) {
-      switch (keyEvent->key()) {
-      case Qt::Key_C:
-        handleCtrlC();
-        return true;
+        // Handle control key combinations
+        if (keyEvent->modifiers() & Qt::ControlModifier) {
+            switch (keyEvent->key()) {
+            case Qt::Key_C:
+                handleCtrlC();
+                return true;
 
-      case Qt::Key_L:
-        handleCtrlL();
-        return true;
+            case Qt::Key_L:
+                handleCtrlL();
+                return true;
 
-      case Qt::Key_D:
-        handleCtrlD();
-        return true;
-      }
+            case Qt::Key_D:
+                handleCtrlD();
+                return true;
+            }
+        }
+
+        // Handle Tab and Shift+Tab for indentation
+        if (keyEvent->key() == Qt::Key_Tab) {
+            if (keyEvent->modifiers() & Qt::ShiftModifier) {
+                handleIndent(false);
+            } else {
+                handleIndent(true);
+            }
+            return true;
+        }
+
+        switch (keyEvent->key()) {
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            if (m_intelligentIndent) {
+                // Get the current line's indent level before executing
+                QString currentLine = getCurrentCommand();
+                int indentLevel = getIndentLevel(currentLine);
+                
+                // Execute the command
+                handleCommandExecution();
+                
+                // Apply the same indentation to the new line
+                QString indent = getIndentString().repeated(indentLevel);
+                setCurrentCommand(indent);
+                return true;
+            }
+            handleCommandExecution();
+            return true;
+
+        case Qt::Key_Up:
+        case Qt::Key_Down:
+            handleHistoryNavigation(keyEvent->key() == Qt::Key_Up);
+            return true;
+
+        case Qt::Key_Backspace:
+            if (terminal->textCursor().position() <= promptPosition) {
+                return true;
+            }
+            // Handle backspace with intelligent indent
+            if (m_intelligentIndent) {
+                QTextCursor cursor = terminal->textCursor();
+                cursor.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor);
+                QString deletedChar = cursor.selectedText();
+                
+                // If deleting a space and cursor is at the start of an indent level
+                if (deletedChar == " " && (cursor.position() - promptPosition) % 4 == 0) {
+                    cursor.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor, 3);
+                    cursor.removeSelectedText();
+                    return true;
+                }
+            }
+            break;
+        }
+
+        if (terminal->textCursor().position() < promptPosition) {
+            terminal->moveCursor(QTextCursor::End);
+        }
     }
-
-    switch (keyEvent->key()) {
-    case Qt::Key_Return:
-    case Qt::Key_Enter:
-      handleCommandExecution();
-      return true;
-
-    case Qt::Key_Up:
-    case Qt::Key_Down:
-      handleHistoryNavigation(keyEvent->key() == Qt::Key_Up);
-      return true;
-
-    case Qt::Key_Tab:
-      handleTabCompletion();
-      return true;
-
-    case Qt::Key_Backspace:
-      if (terminal->textCursor().position() <= promptPosition) {
-        return true;
-      }
-      break;
-    }
-
-    if (terminal->textCursor().position() < promptPosition) {
-      terminal->moveCursor(QTextCursor::End);
-    }
-  }
-  return QWidget::eventFilter(obj, event);
+    return QWidget::eventFilter(obj, event);
 }
 
 void TerminalWidget::handleTabCompletion() {
@@ -798,4 +835,76 @@ void TerminalWidget::appendFormattedOutput(const QString &text) {
 
     terminal->setTextCursor(cursor);
     terminal->ensureCursorVisible();
+}
+
+void TerminalWidget::setIntelligentIndent(bool enabled) {
+    m_intelligentIndent = enabled;
+}
+
+QString TerminalWidget::getIndentString() const {
+    return "    "; // 4 spaces for indentation
+}
+
+int TerminalWidget::getIndentLevel(const QString &text) const {
+    int spaces = 0;
+    for (QChar c : text) {
+        if (c == ' ') spaces++;
+        else if (c == '\t') spaces += 4;
+        else break;
+    }
+    return spaces / 4;
+}
+
+void TerminalWidget::handleIndent(bool indent) {
+    if (!m_intelligentIndent) return;
+
+    QTextCursor cursor = terminal->textCursor();
+    
+    // Get the selected text or current line
+    QString selectedText = cursor.selectedText();
+    bool hasSelection = !selectedText.isEmpty();
+    
+    if (!hasSelection) {
+        // If no selection, select the current line
+        cursor.movePosition(QTextCursor::StartOfLine);
+        cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+        selectedText = cursor.selectedText();
+    }
+    
+    // Split into lines
+    QStringList lines = selectedText.split(QChar::ParagraphSeparator);
+    
+    // Process each line
+    for (int i = 0; i < lines.size(); ++i) {
+        QString &line = lines[i];
+        if (indent) {
+            // Add indentation
+            line.prepend(getIndentString());
+        } else {
+            // Remove indentation if exists
+            if (line.startsWith(getIndentString())) {
+                line.remove(0, getIndentString().length());
+            } else if (line.startsWith("\t")) {
+                line.remove(0, 1);
+            }
+        }
+    }
+    
+    // Join lines back together
+    QString newText = lines.join("\n");
+    
+    // Replace the text
+    cursor.beginEditBlock();
+    cursor.removeSelectedText();
+    cursor.insertText(newText);
+    cursor.endEditBlock();
+    
+    // Maintain selection if there was one
+    if (hasSelection) {
+        int start = cursor.position() - newText.length();
+        int end = cursor.position();
+        cursor.setPosition(start);
+        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        terminal->setTextCursor(cursor);
+    }
 }

@@ -19,6 +19,7 @@ public:
 
     // Terminal specific methods
     void createNewTerminalTab();
+    void setIntelligentIndent(bool enabled);
 
 private slots:
     void addNewTab();
@@ -30,6 +31,7 @@ private slots:
 private:
     QTabWidget *tabWidget;
     QList<QSplitter*> splitters;
+    bool m_intelligentIndent;
 
     void setupUI();
     void createToolBar();
