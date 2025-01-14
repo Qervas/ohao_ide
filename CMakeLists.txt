@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(ohao_IDE VERSION 1.0.4 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -47,4 +49,21 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${Qt6WebEngineWidgets_INCLUDE_DIRS}
     ${Qt6Gui_INCLUDE_DIRS}
     ${Qt6PrintSupport_INCLUDE_DIRS}
+)
+
+# Installation rules with proper destinations
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Install documentation files
+install(FILES
+    LICENSE
+    README.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
+# Add resource files installation if needed
+install(FILES resources.qrc
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 )
