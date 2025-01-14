@@ -2,6 +2,7 @@
 #include "customtextedit.h"
 #include "highlighters/cpphighlighter.h"
 #include "search.h"
+#include "shortcutmanager.h"
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QCompleter>
@@ -149,24 +150,47 @@ CodeEditor::~CodeEditor() {
   }
 }
 
-void CodeEditor::setupUI() {}
+void CodeEditor::setupUI() {
+  auto &shortcutMgr = ShortcutManager::instance();
+
+  // Register editor-specific shortcuts
+  shortcutMgr.registerShortcut("editor.find", QKeySequence::Find, nullptr,
+                               tr("Find in editor"));
+  shortcutMgr.registerShortcut("editor.findNext", QKeySequence(Qt::Key_F3),
+                               nullptr, tr("Find next occurrence"));
+  shortcutMgr.registerShortcut("editor.findPrev",
+                               QKeySequence(Qt::SHIFT | Qt::Key_F3), nullptr,
+                               tr("Find previous occurrence"));
+
+  // Create shortcuts using the registered sequences
+  new QShortcut(shortcutMgr.getShortcut("editor.find"), this,
+                [this]() { showFindDialog(); });
+  new QShortcut(shortcutMgr.getShortcut("editor.findNext"), this,
+                [this]() { findNext(); });
+  new QShortcut(shortcutMgr.getShortcut("editor.findPrev"), this,
+                [this]() { findPrevious(); });
+}
 
 void CodeEditor::setupSearchDialogs() {
-  // Create search dialog
-  m_findDialog = new SearchDialog(m_editor, this);
-
-  m_findDialog->setWindowFlags(Qt::Dialog | Qt::WindowStaysOnTopHint);
+  if (!m_findDialog) {
+    m_findDialog = new SearchDialog(m_editor, this);
+    m_findDialog->setWindowFlags(Qt::Dialog | Qt::WindowStaysOnTopHint);
+  }
 }
 
 void CodeEditor::showFindDialog() {
   if (m_findDialog) {
     m_findDialog->showFind();
+    m_findDialog->raise();
+    m_findDialog->activateWindow();
   }
 }
 
 void CodeEditor::showReplaceDialog() {
   if (m_findDialog) {
     m_findDialog->showReplace();
+    m_findDialog->raise();
+    m_findDialog->activateWindow();
   }
 }
 
