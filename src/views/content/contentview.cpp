@@ -1,16 +1,19 @@
-#include "contentview.h"
-#include "browserview.h"
+#include "views/content/contentview.h"
+#include "views/browser/browserview.h"
+#include "views/content/filepreview.h"
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QPushButton>
+#include <QShortcut>
 #include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWebEngineView>
-#include <QShortcut>
 
-ContentView::ContentView(QWidget *parent) : DockWidgetBase(parent) { setupUI(); }
+ContentView::ContentView(QWidget *parent) : DockWidgetBase(parent) {
+  setupUI();
+}
 
 void ContentView::setupUI() {
   auto mainLayout = new QVBoxLayout(this);
@@ -32,7 +35,8 @@ void ContentView::setupUI() {
   connect(tabs, &QTabWidget::tabCloseRequested, this, &ContentView::closeTab);
 
   // Add Ctrl+W shortcut to close current tab
-  QShortcut *closeTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this);
+  QShortcut *closeTabShortcut =
+      new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this);
   connect(closeTabShortcut, &QShortcut::activated, this, [this]() {
     if (tabs->count() > 0) {
       closeTab(tabs->currentIndex());
@@ -141,13 +145,14 @@ QString ContentView::getCurrentUrl() const {
 
 QString ContentView::getCurrentFilePath() const {
   if (QWidget *widget = tabs->currentWidget()) {
-    if (FilePreview *preview = qobject_cast<FilePreview *>(widget)) {
+    if (qobject_cast<FilePreview *>(widget)) {
       return widget->property("filePath").toString();
-    } else if (BrowserView *browser = qobject_cast<BrowserView *>(widget)) {
+    }
+    if (qobject_cast<BrowserView *>(widget)) {
       return widget->property("filePath").toString();
     }
   }
-  return currentPath; // Fall back to stored path
+  return currentPath;
 }
 
 QList<ContentView::TabState> ContentView::getTabStates() const {

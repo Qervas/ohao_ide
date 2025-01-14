@@ -57,10 +57,6 @@ void InvertedPdfView::handleWheelEvent(QWheelEvent *event) {
       QScrollBar *hBar = horizontalScrollBar();
       QScrollBar *vBar = verticalScrollBar();
 
-      // Calculate relative position within viewport
-      qreal relX = viewportPos.x() / viewport()->width();
-      qreal relY = viewportPos.y() / viewport()->height();
-
       // Calculate scroll fractions
       qreal hFraction = (hBar->value() + viewportPos.x()) /
                         (hBar->maximum() + viewport()->width());

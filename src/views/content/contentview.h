@@ -1,6 +1,6 @@
 #pragma once
 #include "filepreview.h"
-#include "dockwidgetbase.h"
+#include "views/dockwidgetbase.h"
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTabWidget>

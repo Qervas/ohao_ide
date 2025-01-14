@@ -1,8 +1,9 @@
 #include "mainwindow.h"
-#include "keyboardshortcutsdialog.h"
-#include "preferencesdialog.h"
-#include "sessionsettings.h"
-#include "shortcutmanager.h"
+#include "settings/keyboardshortcutsdialog.h"
+#include "settings/preferencesdialog.h"
+#include "settings/sessionsettings.h"
+#include "settings/shortcutmanager.h"
+#include "views/browser/browserview.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QContextMenuEvent>

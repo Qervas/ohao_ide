@@ -1,8 +1,8 @@
-#include "codeeditor.h"
+#include "codeeditor/codeeditor.h"
 #include "customtextedit.h"
 #include "highlighters/cpphighlighter.h"
 #include "search.h"
-#include "shortcutmanager.h"
+#include "settings/shortcutmanager.h"
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QCompleter>
@@ -442,16 +442,7 @@ QString CodeEditor::getIndentString() const {
 }
 
 int CodeEditor::getIndentLevel(const QString &text) const {
-  int spaces = 0;
-  for (QChar c : text) {
-    if (c == ' ')
-      spaces++;
-    else if (c == '\t')
-      spaces += 4;
-    else
-      break;
-  }
-  return spaces / 4;
+  return m_folding.getIndentLevel(text);
 }
 
 bool CodeEditor::handleSmartBackspace() {
@@ -825,212 +816,42 @@ QString CodeEditor::getWordUnderCursor(const QTextCursor &cursor) const {
 }
 
 void CodeEditor::toggleFold(const QTextBlock &blockToFold) {
-  if (!blockToFold.isValid())
-    return;
-
-  QTextBlock block = blockToFold;
-  if (isFoldable(block)) {
-    bool shouldFold = !isFolded(block);
-
-    // If this block is part of a function/class declaration spanning multiple
-    // lines, find the block with the opening brace
-    if (!block.text().trimmed().endsWith('{')) {
-      QTextBlock searchBlock = block;
-      int maxLines = 3;
-      while (searchBlock.isValid() && maxLines > 0) {
-        QString text = searchBlock.text().trimmed();
-        if (text.endsWith('{')) {
-          block = searchBlock;
-          break;
-        }
-        searchBlock = searchBlock.next();
-        maxLines--;
-      }
-    }
-
-    setFolded(block, shouldFold);
-    updateVisibleBlocks();
-    m_editor->viewport()->update();
-    m_lineNumberArea->update();
-  }
+  m_folding.toggleFold(blockToFold);
+  updateVisibleBlocks();
+  m_editor->viewport()->update();
+  m_lineNumberArea->update();
 }
 
 void CodeEditor::foldAll() {
-  QTextBlock block = document()->firstBlock();
-  while (block.isValid()) {
-    if (isFoldable(block)) {
-      setFolded(block, true);
-    }
-    block = block.next();
-  }
+  m_folding.foldAll(m_editor->document());
   updateVisibleBlocks();
   viewport()->update();
 }
 
 void CodeEditor::unfoldAll() {
-  m_foldedBlocks.clear();
+  m_folding.unfoldAll();
   updateVisibleBlocks();
   viewport()->update();
 }
 
 bool CodeEditor::isFoldable(const QTextBlock &block) const {
-  if (!block.isValid())
-    return false;
-
-  QString text = block.text().trimmed();
-  if (text.isEmpty())
-    return false;
-
-  // Case 1: Block ends with an opening brace
-  if (text.endsWith('{'))
-    return true;
-
-  // Case 2: Function or class declaration that might span multiple lines
-  if (text.startsWith("class ") || text.startsWith("struct ") ||
-      text.contains("function") || text.contains("(")) {
-    // Check if any following block has an opening brace
-    QTextBlock nextBlock = block.next();
-    int maxLines = 3; // Look ahead maximum 3 lines
-    while (nextBlock.isValid() && maxLines > 0) {
-      QString nextText = nextBlock.text().trimmed();
-      if (nextText.endsWith('{'))
-        return true;
-      if (!nextText.isEmpty() && !nextText.contains("("))
-        break;
-      nextBlock = nextBlock.next();
-      maxLines--;
-    }
-  }
-
-  // Case 3: Indentation-based folding
-  int currentIndent = getIndentLevel(block.text());
-  if (currentIndent == 0)
-    return false; // Don't fold non-indented blocks
-
-  QTextBlock nextBlock = block.next();
-  while (nextBlock.isValid() && nextBlock.text().trimmed().isEmpty()) {
-    nextBlock = nextBlock.next();
-  }
-
-  if (!nextBlock.isValid())
-    return false;
-
-  int nextIndent = getIndentLevel(nextBlock.text());
-  return nextIndent > currentIndent;
+  return m_folding.isFoldable(block);
 }
 
 bool CodeEditor::isFolded(const QTextBlock &block) const {
-  return m_foldedBlocks.value(block.blockNumber(), false);
+  return m_folding.isFolded(block);
 }
 
 void CodeEditor::setFolded(const QTextBlock &block, bool folded) {
-  if (!isFoldable(block))
-    return;
-
-  int blockNum = block.blockNumber();
-  if (folded) {
-    m_foldedBlocks[blockNum] = true;
-    // Find and store the end of the folding range
-    int endBlockNum = findFoldingEndBlock(block);
-    if (endBlockNum > blockNum) {
-      m_foldingRanges[blockNum] = endBlockNum;
-    }
-  } else {
-    m_foldedBlocks.remove(blockNum);
-    m_foldingRanges.remove(blockNum);
-  }
+  m_folding.setFolded(block, folded);
 }
 
 int CodeEditor::findFoldingEndBlock(const QTextBlock &startBlock) const {
-  if (!startBlock.isValid())
-    return -1;
-
-  QString startText = startBlock.text().trimmed();
-  int startIndent = getIndentLevel(startBlock.text());
-
-  // Case 1: Block starts with a brace
-  bool hasBrace = startText.endsWith('{');
-  int braceCount = hasBrace ? 1 : 0;
-
-  // Case 2: Function/class declaration that might span multiple lines
-  if (!hasBrace &&
-      (startText.startsWith("class ") || startText.startsWith("struct ") ||
-       startText.contains("function") || startText.contains("("))) {
-    QTextBlock nextBlock = startBlock.next();
-    int maxLines = 3;
-    while (nextBlock.isValid() && maxLines > 0) {
-      QString nextText = nextBlock.text().trimmed();
-      if (nextText.endsWith('{')) {
-        hasBrace = true;
-        braceCount = 1;
-        break;
-      }
-      if (!nextText.isEmpty() && !nextText.contains("("))
-        break;
-      nextBlock = nextBlock.next();
-      maxLines--;
-    }
-  }
-
-  QTextBlock block = startBlock.next();
-  bool foundContent = false; // Track if we've found any non-empty content
-
-  while (block.isValid()) {
-    QString text = block.text().trimmed();
-    if (text.isEmpty()) {
-      block = block.next();
-      continue;
-    }
-
-    foundContent = true;
-    int indent = getIndentLevel(block.text());
-
-    if (hasBrace) {
-      // Count braces in the line
-      braceCount += text.count('{') - text.count('}');
-      if (braceCount == 0) {
-        return block.blockNumber();
-      }
-      // If we find a closing brace at the same indent level, it's probably the
-      // end
-      if (braceCount > 0 && indent == startIndent && text.endsWith('}')) {
-        return block.blockNumber();
-      }
-    } else {
-      // For indentation-based folding
-      if (indent <= startIndent && foundContent) {
-        return block.previous().blockNumber();
-      }
-    }
-
-    block = block.next();
-  }
-
-  // If we reach the end, return the last valid block
-  return block.isValid() ? block.blockNumber()
-                         : startBlock.document()->lastBlock().blockNumber();
+  return m_folding.findFoldingEndBlock(startBlock);
 }
 
 bool CodeEditor::isBlockVisible(const QTextBlock &block) const {
-  if (!block.isValid())
-    return false;
-
-  // Check if any parent blocks are folded
-  QTextBlock current = block.previous();
-  int currentBlockNum = block.blockNumber();
-
-  while (current.isValid()) {
-    int parentBlockNum = current.blockNumber();
-    if (m_foldedBlocks.value(parentBlockNum, false)) {
-      int foldEnd = m_foldingRanges.value(parentBlockNum, -1);
-      if (currentBlockNum <= foldEnd) {
-        return false;
-      }
-    }
-    current = current.previous();
-  }
-
-  return true;
+  return m_folding.isBlockVisible(block);
 }
 
 void CodeEditor::updateVisibleBlocks() {
@@ -1056,88 +877,21 @@ void CodeEditor::updateFoldingMarkerArea(const QRect &rect, int dy) {
 
 void CodeEditor::paintFoldingMarkers(QPainter &painter, const QTextBlock &block,
                                      const QRectF &rect) {
-  if (!isFoldable(block))
-    return;
-
-  bool folded = isFolded(block);
-  bool hovered = m_hoveredFoldMarkers.value(block.blockNumber(), false);
-  int top = rect.top();
-
-  // Larger base size for the marker
-  qreal markerSize = hovered ? 16.0 : 12.0;
-  qreal yOffset =
-      (rect.height() - markerSize) / 2; // Center vertically in the line
-
-  // Draw folding marker background
-  QRectF markerRect(4, top + yOffset, markerSize, markerSize);
-  painter.save();
-
-  // Draw background with hover effect
-  painter.setPen(Qt::NoPen);
-  if (hovered) {
-    // More vibrant sky blue when hovered
-    painter.setBrush(QColor(100, 181, 246, 220));
-  } else {
-    // Slightly more visible when not hovered
-    painter.setBrush(QColor(100, 100, 100, 160));
-  }
-
-  // Draw a rounded rectangle for better visual appeal
-  painter.setRenderHint(QPainter::Antialiasing);
-  painter.drawRoundedRect(markerRect, 3, 3);
-
-  // Draw marker symbol
-  painter.setPen(
-      QPen(hovered ? Qt::white : QColor(240, 240, 240), hovered ? 2.0 : 1.5));
-  qreal centerY = markerRect.center().y();
-  qreal centerX = markerRect.center().x();
-  qreal lineLength = markerSize * 0.7; // Slightly larger lines
-
-  // Draw the horizontal line
-  painter.drawLine(QPointF(centerX - lineLength / 2, centerY),
-                   QPointF(centerX + lineLength / 2, centerY));
-
-  if (!folded) {
-    // Draw the vertical line for expanded state
-    painter.drawLine(QPointF(centerX, centerY - lineLength / 2),
-                     QPointF(centerX, centerY + lineLength / 2));
-  }
-
-  painter.restore();
+  m_folding.paintFoldingMarkers(
+      painter, block, rect, isFolded(block),
+      m_hoveredFoldMarkers.value(block.blockNumber(), false),
+      lineNumberAreaWidth());
 }
 
 bool CodeEditor::isFoldMarkerUnderMouse(const QPoint &pos,
                                         const QTextBlock &block) const {
-  if (!block.isValid() || !isFoldable(block))
-    return false;
-
   int top = m_editor->blockBoundingGeometry(block)
                 .translated(m_editor->contentOffset())
                 .top();
   int height = m_editor->blockBoundingRect(block).height();
 
-  // Much larger hit area for better sensitivity (entire left margin width x
-  // line height)
-  QRectF hitArea(0, top, lineNumberAreaWidth() - 5, height);
-  return hitArea.contains(pos.x(), pos.y());
-}
-
-void CodeEditor::mousePressEvent(QMouseEvent *event) {
-  if (event->button() == Qt::LeftButton) {
-    QPoint pos = event->pos();
-    if (pos.x() <= lineNumberAreaWidth()) {
-      // Click in line number area
-      QTextBlock block = blockAtPosition(pos.y());
-      if (block.isValid() && isFoldable(block)) {
-        if (isFoldMarkerUnderMouse(pos, block)) {
-          toggleFold(block);
-          event->accept();
-          return;
-        }
-      }
-    }
-  }
-  DockWidgetBase::mousePressEvent(event);
+  return m_folding.isFoldMarkerUnderMouse(pos, block, top, height,
+                                          lineNumberAreaWidth());
 }
 
 void CodeEditor::mouseMoveEvent(QMouseEvent *event) {
@@ -1272,6 +1026,24 @@ bool CodeEditor::handleBracketPair(QChar ch, QTextCursor &cursor,
   cursor.endEditBlock();
   m_editor->setTextCursor(cursor);
   return true;
+}
+
+void CodeEditor::mousePressEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton) {
+    QPoint pos = event->pos();
+    if (pos.x() <= lineNumberAreaWidth()) {
+      // Click in line number area
+      QTextBlock block = blockAtPosition(pos.y());
+      if (block.isValid() && isFoldable(block)) {
+        if (isFoldMarkerUnderMouse(pos, block)) {
+          toggleFold(block);
+          event->accept();
+          return;
+        }
+      }
+    }
+  }
+  DockWidgetBase::mousePressEvent(event);
 }
 
 #include "moc_codeeditor.cpp"

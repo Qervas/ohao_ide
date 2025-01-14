@@ -1,5 +1,5 @@
 #pragma once
-#include "contentview.h"
+#include "views/content/contentview.h"
 #include <QObject>
 #include <QStringList>
 
