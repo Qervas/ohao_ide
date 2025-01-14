@@ -1,5 +1,5 @@
 Name:           ohao-ide
-Version:        1.0.3
+Version:        1.0.4
 Release:        1%{?dist}
 Summary:        Ohao IDE - A lightweight IDE
 License:        MIT
@@ -50,15 +50,16 @@ EOF
 %install
 %cmake_install
 
-# Install desktop file
+# Install desktop file only
 mkdir -p %{buildroot}%{_datadir}/applications
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{name}.desktop
 
 %files
 %{_bindir}/ohao_IDE
-%{_docdir}/ohao_IDE/LICENSE
-%{_docdir}/ohao_IDE/README.md
+%{_datadir}/doc/ohao_IDE/LICENSE
+%{_datadir}/doc/ohao_IDE/README.md
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/ohao_IDE/resources.qrc
 %license LICENSE
 
 %changelog

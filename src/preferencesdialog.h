@@ -14,10 +14,12 @@ public:
     QString getFontFamily() const;
     bool getWordWrap() const;
     bool getIntelligentIndent() const;
+    bool getSyntaxHighlighting() const;
 
 private:
     QFontComboBox *fontComboBox;
     QSpinBox *fontSizeSpinBox;
     QCheckBox *wordWrapCheckBox;
     QCheckBox *intelligentIndentCheckBox;
+    QCheckBox *syntaxHighlightingCheckBox;
 };

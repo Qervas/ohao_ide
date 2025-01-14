@@ -471,44 +471,73 @@ bool MainWindow::maybeSave() {
 }
 
 void MainWindow::setInitialDirectory(const QString &path) {
-  if (path.isEmpty() || !QDir(path).exists()) {
-    return;
-  }
+    if (path.isEmpty() || !QDir(path).exists()) {
+        return;
+    }
 
-  // Save current session if needed
-  if (!projectPath.isEmpty()) {
-    saveSettings();
-  }
+    // Save current session if needed
+    if (!projectPath.isEmpty()) {
+        saveSettings();
+    }
 
-  projectTree->setRootPath(path);
-  projectPath = path;
+    projectTree->setRootPath(path);
+    projectPath = path;
 
-  // Update recent projects list
-  recentProjects.removeAll(path);  // Remove if exists
-  recentProjects.prepend(path);    // Add to front
-  while (recentProjects.size() > 10) {
-    recentProjects.removeLast();
-  }
+    // Update recent projects list
+    recentProjects.removeAll(path);  // Remove if exists
+    recentProjects.prepend(path);    // Add to front
+    while (recentProjects.size() > 10) {
+        recentProjects.removeLast();
+    }
 
-  // Save settings immediately
-  QSettings settings;
-  settings.setValue("recentProjects", recentProjects);
-  
-  // Update UI
-  updateRecentProjectsMenu();
-  welcomeView->updateRecentProjects(recentProjects);
+    // Save settings immediately
+    QSettings settings;
+    settings.setValue("recentProjects", recentProjects);
+    
+    // Update UI
+    updateRecentProjectsMenu();
+    welcomeView->updateRecentProjects(recentProjects);
 
-  // Switch from welcome view if needed
-  if (centralWidget() == welcomeView) {
-    welcomeView->setParent(nullptr);
-    setCentralWidget(editorTabs);
-  }
+    // Switch from welcome view if needed
+    if (centralWidget() == welcomeView) {
+        welcomeView->setParent(nullptr);
+        setCentralWidget(editorTabs);
+    }
 
-  // Show project tree
-  dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
-  
-  // Update window title
-  setWindowTitle(QString("ohao IDE - %1").arg(QDir(path).dirName()));
+    // Check if we have a saved session for this folder
+    QStringList openedFiles;
+    QStringList openedDirs;
+    int currentTabIndex;
+    QMap<QString, SessionSettings::WindowState> windowStates;
+    QByteArray mainWindowGeometry;
+    QByteArray mainWindowState;
+
+    SessionSettings::instance().loadSession(openedFiles, openedDirs,
+                                          currentTabIndex, windowStates,
+                                          mainWindowGeometry, mainWindowState);
+
+    if (!mainWindowState.isEmpty() && openedDirs.contains(path)) {
+        // We have a saved session for this folder, restore it
+        restoreState(mainWindowState);
+        if (!mainWindowGeometry.isEmpty()) {
+            restoreGeometry(mainWindowGeometry);
+        }
+    } else {
+        // No saved session, just show the project tree
+        dockManager->hideAllDocks();
+        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+        
+        // Set a reasonable initial width for project tree
+        if (auto projectDock = dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree)) {
+            projectDock->setMinimumWidth(100);
+            projectDock->setMaximumWidth(300);
+            int preferredWidth = qMin(width() / 7, 200);  // 1:7 ratio, max 200px
+            projectDock->resize(preferredWidth, projectDock->height());
+        }
+    }
+    
+    // Update window title
+    setWindowTitle(QString("ohao IDE - %1").arg(QDir(path).dirName()));
 }
 
 void MainWindow::handleFileSelected(const QString &filePath) {
@@ -779,37 +808,32 @@ void MainWindow::updateRecentProjectsMenu() {
 void MainWindow::showPreferences() {
   PreferencesDialog dialog(this);
   if (dialog.exec() == QDialog::Accepted) {
-    // Save settings
     QSettings settings;
-    settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
+    settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/wordWrap", dialog.getWordWrap());
     settings.setValue("editor/intelligentIndent", dialog.getIntelligentIndent());
-
-    // Apply settings to all open editors
+    settings.setValue("editor/syntaxHighlighting", dialog.getSyntaxHighlighting());
     applyEditorSettings();
   }
 }
 
 void MainWindow::applyEditorSettings() {
   QSettings settings;
-  QFont font(settings.value("editor/fontFamily", "Monospace").toString(),
-             settings.value("editor/fontSize", 11).toInt());
+  QFont font(settings.value("editor/fontFamily", "Monospace").toString());
+  font.setPointSize(settings.value("editor/fontSize", 11).toInt());
   bool wordWrap = settings.value("editor/wordWrap", true).toBool();
   bool intelligentIndent = settings.value("editor/intelligentIndent", true).toBool();
+  bool syntaxHighlighting = settings.value("editor/syntaxHighlighting", true).toBool();
 
-  // Apply to all open editor tabs
+  // Apply to all open editors
   for (int i = 0; i < editorTabs->count(); ++i) {
-    if (CodeEditor *editor = qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
+    if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
       editor->setFont(font);
-      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
-    }
-  }
-
-  // Apply to terminal
-  if (auto terminalDock = dockManager->getDockWidget(DockManager::DockWidgetType::Terminal)) {
-    if (auto terminal = qobject_cast<Terminal*>(terminalDock->widget())) {
-      terminal->setIntelligentIndent(intelligentIndent);
+      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth
+                                     : QPlainTextEdit::NoWrap);
+      editor->setIntelligentIndent(intelligentIndent);
+      editor->setSyntaxHighlighting(syntaxHighlighting);
     }
   }
 }
@@ -854,61 +878,77 @@ void MainWindow::saveSessionState() {
 }
 
 void MainWindow::loadSessionState() {
-  QStringList openedFiles;
-  QStringList openedDirs;
-  int currentTabIndex;
-  QMap<QString, SessionSettings::WindowState> windowStates;
-  QByteArray mainWindowGeometry;
-  QByteArray mainWindowState;
+    QStringList openedFiles;
+    QStringList openedDirs;
+    int currentTabIndex;
+    QMap<QString, SessionSettings::WindowState> windowStates;
+    QByteArray mainWindowGeometry;
+    QByteArray mainWindowState;
 
-  SessionSettings::instance().loadSession(openedFiles, openedDirs,
-                                          currentTabIndex, windowStates,
-                                          mainWindowGeometry, mainWindowState);
+    SessionSettings::instance().loadSession(openedFiles, openedDirs,
+                                         currentTabIndex, windowStates,
+                                         mainWindowGeometry, mainWindowState);
 
-  // Load directories first
-  for (const QString &dir : openedDirs) {
-    if (QDir(dir).exists()) {
-      setInitialDirectory(dir);
+    // First restore the main window geometry and state
+    if (!mainWindowGeometry.isEmpty()) {
+        restoreGeometry(mainWindowGeometry);
     }
-  }
-
-  // Load files
-  for (const QString &file : openedFiles) {
-    if (QFileInfo(file).exists()) {
-      loadFile(file);
-    }
-  }
-
-  // Restore window states
-  if (!windowStates.isEmpty()) {
-    const auto &contentViewState = windowStates.value("contentView");
-    if (contentView && contentViewState.isVisible) {
-      // Restore tabs
-      contentView->restoreTabStates(contentViewState.tabStates);
-
-      // Restore dock state
-      if (auto dock = dockManager->getDockWidget(
-              DockManager::DockWidgetType::ContentView)) {
-        dock->setVisible(true);
-        if (!contentViewState.geometry.isEmpty()) {
-          dock->restoreGeometry(contentViewState.geometry);
+    
+    // Load directories first
+    for (const QString &dir : openedDirs) {
+        if (QDir(dir).exists()) {
+            // Just set the root path without applying default layout
+            projectTree->setRootPath(dir);
+            projectPath = dir;
         }
-      }
     }
-  }
 
-  // Set current tab only if valid
-  if (currentTabIndex >= 0 && currentTabIndex < editorTabs->count()) {
-    editorTabs->setCurrentIndex(currentTabIndex);
-  }
+    // Restore the main window state (includes dock positions and sizes)
+    if (!mainWindowState.isEmpty()) {
+        restoreState(mainWindowState);
+        
+        // Fine-tune project tree width if it exists
+        if (auto projectDock = dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree)) {
+            projectDock->setMinimumWidth(100);
+            projectDock->setMaximumWidth(300);
+            int preferredWidth = qMin(width() / 7, 200);  // 1:7 ratio, max 200px
+            projectDock->resize(preferredWidth, projectDock->height());
+        }
+    }
 
-  // Restore window geometry and state last
-  if (!mainWindowGeometry.isEmpty()) {
-    restoreGeometry(mainWindowGeometry);
-  }
-  if (!mainWindowState.isEmpty()) {
-    restoreState(mainWindowState);
-  }
+    // Load files
+    for (const QString &file : openedFiles) {
+        if (QFileInfo(file).exists()) {
+            loadFile(file);
+        }
+    }
+
+    // Set current tab
+    if (currentTabIndex >= 0 && currentTabIndex < editorTabs->count()) {
+        editorTabs->setCurrentIndex(currentTabIndex);
+    }
+
+    // Restore specific dock states
+    if (!windowStates.isEmpty()) {
+        const auto &contentViewState = windowStates.value("contentView");
+        if (contentView && contentViewState.isVisible) {
+            // Restore tabs
+            contentView->restoreTabStates(contentViewState.tabStates);
+
+            // Restore dock state
+            if (auto dock = dockManager->getDockWidget(DockManager::DockWidgetType::ContentView)) {
+                dock->setVisible(true);
+                if (!contentViewState.geometry.isEmpty()) {
+                    dock->restoreGeometry(contentViewState.geometry);
+                }
+            }
+        }
+    }
+
+    // Update window title
+    if (!projectPath.isEmpty()) {
+        setWindowTitle(QString("ohao IDE - %1").arg(QDir(projectPath).dirName()));
+    }
 }
 
 void MainWindow::closeFolder() {

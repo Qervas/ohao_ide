@@ -44,6 +44,8 @@ public:
     QDockWidget* getDockWidget(DockWidgetType type) const;
     bool isDockVisible(DockWidgetType type) const;
     void setDockVisible(DockWidgetType type, bool visible);
+    void createDefaultLayout();
+    void hideAllDocks();
 
     TerminalWidget* getTerminalWidget() {
         if (auto dock = getDockWidget(DockWidgetType::Terminal)) {
@@ -82,5 +84,4 @@ private:
     Qt::DockWidgetArea convertDockArea(DockArea area) const;
     void connectDockSignals(QDockWidget *dock);
     QString getDockTypeName(DockWidgetType type) const;
-    void createDefaultLayout();
 };

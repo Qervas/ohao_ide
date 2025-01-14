@@ -1,61 +1,54 @@
 cmake_minimum_required(VERSION 3.16)
-project(ohao_IDE VERSION 1.0.3 LANGUAGES CXX)
+project(ohao_IDE VERSION 1.0.4 LANGUAGES CXX)
+
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
-
-# set debug on
-set(CMAKE_BUILD_TYPE Debug)
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Find required Qt packages
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Pdf PdfWidgets WebEngineCore WebEngineWidgets Gui PrintSupport)
 
+# Automatically find all source and header files
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE HEADERS "src/*.h" "src/*.hpp")
 
-# Include GNUInstallDirs for standard installation directories
-include(GNUInstallDirs)
+# Print found files for debugging
+message("Found source files: ${SOURCES}")
+message("Found header files: ${HEADERS}")
 
-# Make CUPS optional
-find_package(Cups)
-if(CUPS_FOUND)
-    add_definitions(-DWITH_CUPS)
-endif()
+# Create executable
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
-find_package(Qt6 REQUIRED COMPONENTS 
-    Core
-    Widgets
-    Gui
-    PrintSupport
-    Pdf
-    PdfWidgets
-    Network
-	WebEngineWidgets
-)
-
-# Gather all source files
-file(GLOB_RECURSE SOURCES 
-    src/*.cpp
-    src/*.h
-    src/*.hpp
-)
-
-# Create the executable with all source files
-add_executable(${PROJECT_NAME}
-    ${SOURCES}
-    resources.qrc
-)
-
+# Link Qt libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Widgets
-    Qt6::Gui
-    Qt6::PrintSupport
+    Qt6::Network
     Qt6::Pdf
     Qt6::PdfWidgets
-    Qt6::Network
-	Qt6::WebEngineWidgets 
+    Qt6::WebEngineCore
+    Qt6::WebEngineWidgets
+    Qt6::Gui
+    Qt6::PrintSupport
+)
+
+# Add include directories for Qt
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${Qt6Core_INCLUDE_DIRS}
+    ${Qt6Widgets_INCLUDE_DIRS}
+    ${Qt6Network_INCLUDE_DIRS}
+    ${Qt6Pdf_INCLUDE_DIRS}
+    ${Qt6PdfWidgets_INCLUDE_DIRS}
+    ${Qt6WebEngineCore_INCLUDE_DIRS}
+    ${Qt6WebEngineWidgets_INCLUDE_DIRS}
+    ${Qt6Gui_INCLUDE_DIRS}
+    ${Qt6PrintSupport_INCLUDE_DIRS}
 )
 
 # Installation rules with proper destinations
@@ -64,8 +57,13 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 # Install documentation files
-install(FILES 
-    LICENSE 
+install(FILES
+    LICENSE
     README.md
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
+# Add resource files installation if needed
+install(FILES resources.qrc
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 )

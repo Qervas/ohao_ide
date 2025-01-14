@@ -1,16 +1,20 @@
 #pragma once
-#include <QSyntaxHighlighter>
-#include <QTextCharFormat>
+#include "basehighlighter.h"
 #include <QRegularExpression>
+#include <QTextCharFormat>
 
-class CppHighlighter : public QSyntaxHighlighter {
+class CppHighlighter : public BaseHighlighter {
     Q_OBJECT
 
 public:
     explicit CppHighlighter(QTextDocument *parent = nullptr);
 
+    QString name() const override { return "C++"; }
+    QString description() const override { return "Syntax highlighting for C/C++ files"; }
+    QString filePattern() const override { return "*.cpp;*.h;*.hpp;*.c;*.cc;*.cxx"; }
+
 protected:
-    void highlightBlock(const QString &text) override;
+    void doHighlightBlock(const QString &text) override;
 
 private:
     struct HighlightingRule {
@@ -18,6 +22,9 @@ private:
         QTextCharFormat format;
     };
     QVector<HighlightingRule> highlightingRules;
+
+    QRegularExpression commentStartExpression;
+    QRegularExpression commentEndExpression;
 
     QTextCharFormat keywordFormat;
     QTextCharFormat classFormat;
@@ -28,9 +35,7 @@ private:
     QTextCharFormat preprocessorFormat;
     QTextCharFormat numberFormat;
     QTextCharFormat operatorFormat;
-    QTextCharFormat stlContainerFormat;
-    QTextCharFormat smartPtrFormat;
 
-    QRegularExpression commentStartExpression;
-    QRegularExpression commentEndExpression;
+    void setupFormats();
+    void setupRules();
 }; 
