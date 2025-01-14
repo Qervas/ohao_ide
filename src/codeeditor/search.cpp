@@ -10,7 +10,7 @@
 #include <QTextCursor>
 
 SearchDialog::SearchDialog(QPlainTextEdit *editor, QWidget *parent)
-    : QDialog(parent), m_editor(editor) {
+    : QDialog(parent), m_editor(editor), m_searchFlags(QTextDocument::FindFlags()), m_lastSearchText("") {
     setWindowTitle(tr("Find"));
     
     // Create find layout
