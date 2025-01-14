@@ -779,37 +779,32 @@ void MainWindow::updateRecentProjectsMenu() {
 void MainWindow::showPreferences() {
   PreferencesDialog dialog(this);
   if (dialog.exec() == QDialog::Accepted) {
-    // Save settings
     QSettings settings;
-    settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
+    settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/wordWrap", dialog.getWordWrap());
     settings.setValue("editor/intelligentIndent", dialog.getIntelligentIndent());
-
-    // Apply settings to all open editors
+    settings.setValue("editor/syntaxHighlighting", dialog.getSyntaxHighlighting());
     applyEditorSettings();
   }
 }
 
 void MainWindow::applyEditorSettings() {
   QSettings settings;
-  QFont font(settings.value("editor/fontFamily", "Monospace").toString(),
-             settings.value("editor/fontSize", 11).toInt());
+  QFont font(settings.value("editor/fontFamily", "Monospace").toString());
+  font.setPointSize(settings.value("editor/fontSize", 11).toInt());
   bool wordWrap = settings.value("editor/wordWrap", true).toBool();
   bool intelligentIndent = settings.value("editor/intelligentIndent", true).toBool();
+  bool syntaxHighlighting = settings.value("editor/syntaxHighlighting", true).toBool();
 
-  // Apply to all open editor tabs
+  // Apply to all open editors
   for (int i = 0; i < editorTabs->count(); ++i) {
-    if (CodeEditor *editor = qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
+    if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
       editor->setFont(font);
-      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
-    }
-  }
-
-  // Apply to terminal
-  if (auto terminalDock = dockManager->getDockWidget(DockManager::DockWidgetType::Terminal)) {
-    if (auto terminal = qobject_cast<Terminal*>(terminalDock->widget())) {
-      terminal->setIntelligentIndent(intelligentIndent);
+      editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth
+                                     : QPlainTextEdit::NoWrap);
+      editor->setIntelligentIndent(intelligentIndent);
+      editor->setSyntaxHighlighting(syntaxHighlighting);
     }
   }
 }

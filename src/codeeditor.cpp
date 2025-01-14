@@ -1,4 +1,5 @@
 #include "codeeditor.h"
+#include "highlighters/cpphighlighter.h"
 #include <QCheckBox>
 #include <QDialog>
 #include <QFontMetrics>
@@ -1189,3 +1190,13 @@ QColor CodeEditor::getBracketColor(int level) const {
 }
 
 void CodeEditor::cursorPositionChanged() { updateBracketMatching(); }
+
+void CodeEditor::setSyntaxHighlighting(bool enabled) {
+  if (m_highlighter) {
+    m_highlighter->setEnabled(enabled);
+  }
+}
+
+bool CodeEditor::isSyntaxHighlightingEnabled() const {
+  return m_highlighter && m_highlighter->isEnabled();
+}

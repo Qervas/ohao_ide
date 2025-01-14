@@ -1,5 +1,5 @@
 #pragma once
-#include "cpphighlighter.h"
+#include "highlighters/basehighlighter.h"
 #include "dockwidgetbase.h"
 #include <QMap>
 #include <QPlainTextEdit>
@@ -110,6 +110,9 @@ public:
   void findNext();
   void findPrevious();
 
+  void setSyntaxHighlighting(bool enabled);
+  bool isSyntaxHighlightingEnabled() const;
+
 protected:
   void resizeEvent(QResizeEvent *event) override;
 
@@ -129,7 +132,7 @@ private slots:
 private:
   CustomPlainTextEdit *m_editor;
   LineNumberArea *m_lineNumberArea;
-  CppHighlighter *m_highlighter;
+  BaseHighlighter *m_highlighter;
   bool m_intelligentIndent;
 
   // Search and Replace members
