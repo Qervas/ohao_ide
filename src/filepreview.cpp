@@ -22,6 +22,7 @@
 #include <QWheelEvent>
 #include <QWidget>
 #include <qpdfbookmarkmodel.h>
+#include <QTimer>
 
 using Role = QPdfBookmarkModel::Role;
 
@@ -29,6 +30,11 @@ FilePreview::FilePreview(QWidget *parent)
     : QWidget(parent), isDarkMode(false), settings("ohao", "ohao_IDE") {
   customZoomFactor =
       settings.value("zoom_factor", DEFAULT_ZOOM_FACTOR).toDouble();
+  
+  // Setup resize timer
+  resizeTimer.setSingleShot(true);
+  resizeTimer.setInterval(50); // 50ms delay
+  
   setupUI();
   if (pdfView) {
     pdfView->setCustomZoomFactor(customZoomFactor);
@@ -56,7 +62,6 @@ void FilePreview::setupUI() {
 
   // Create toolbar
   toolbar = new QToolBar(this);
-  setupPDFTools();
   mainLayout->addWidget(toolbar);
 
   // Create main splitter
@@ -99,14 +104,43 @@ void FilePreview::setupUI() {
 
   mainLayout->addWidget(mainSplitter);
 
+  // Setup zoom combo box first
+  zoomCombo = new QComboBox(this);
+  zoomCombo->setEditable(true);
+  zoomCombo->setInsertPolicy(QComboBox::NoInsert);
+  zoomCombo->lineEdit()->setAlignment(Qt::AlignCenter);
+  zoomCombo->addItems({"25%", "50%", "75%", "100%", "125%", "150%", "200%", "400%"});
+  zoomCombo->setCurrentText("100%");
+
+  // Setup PDF tools after zoom combo is created
+  setupPDFTools();
+
+  // Connect zoom combo signals after it's fully set up
+  connect(zoomCombo->lineEdit(), &QLineEdit::editingFinished, this, [this]() {
+    QString text = zoomCombo->currentText();
+    if (!text.endsWith('%'))
+      text += '%';
+    handleZoomChange(0);
+  });
+
+  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &FilePreview::handleZoomChange);
+
+  // Connect PDF view zoom changes to update the combo box
+  connect(pdfView, &QPdfView::zoomFactorChanged, this, [this](qreal zoom) {
+    int percent = qRound(zoom * 100);
+    zoomCombo->setCurrentText(QString::number(percent) + "%");
+  });
+
   // Setup zoom shortcuts
   QList<QKeySequence> zoomInSequences = {
       QKeySequence::ZoomIn, QKeySequence(Qt::CTRL | Qt::Key_Plus),
-      QKeySequence(Qt::CTRL | Qt::Key_Equal) // Additional common shortcut
+      QKeySequence(Qt::CTRL | Qt::Key_Equal)
   };
 
   QList<QKeySequence> zoomOutSequences = {
-      QKeySequence::ZoomOut, QKeySequence(Qt::CTRL | Qt::Key_Minus)};
+      QKeySequence::ZoomOut, QKeySequence(Qt::CTRL | Qt::Key_Minus)
+  };
 
   for (const auto &sequence : zoomInSequences) {
     QShortcut *zoomInShortcut = new QShortcut(sequence, this);
@@ -115,13 +149,11 @@ void FilePreview::setupUI() {
 
   for (const auto &sequence : zoomOutSequences) {
     QShortcut *zoomOutShortcut = new QShortcut(sequence, this);
-    connect(zoomOutShortcut, &QShortcut::activated, this,
-            &FilePreview::zoomOut);
+    connect(zoomOutShortcut, &QShortcut::activated, this, &FilePreview::zoomOut);
   }
 
-  // Connect signals
-  connect(bookmarkView, &QTreeView::clicked, this,
-          &FilePreview::handleBookmarkClicked);
+  // Connect other signals
+  connect(bookmarkView, &QTreeView::clicked, this, &FilePreview::handleBookmarkClicked);
   connect(pdfDoc, &QPdfDocument::statusChanged, this,
           [this](QPdfDocument::Status status) {
             if (status == QPdfDocument::Status::Ready) {
@@ -133,43 +165,12 @@ void FilePreview::setupUI() {
 
   // Setup shortcuts
   new QShortcut(QKeySequence::Find, this, this, &FilePreview::handleSearch);
-  new QShortcut(QKeySequence::FindNext, this, this,
-                &FilePreview::handleSearchNext);
-  new QShortcut(QKeySequence::FindPrevious, this, this,
-                &FilePreview::handleSearchPrev);
+  new QShortcut(QKeySequence::FindNext, this, this, &FilePreview::handleSearchNext);
+  new QShortcut(QKeySequence::FindPrevious, this, this, &FilePreview::handleSearchPrev);
   new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus), this,
                 [this]() { handleZoomChange(zoomCombo->currentIndex() + 1); });
   new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus), this,
                 [this]() { handleZoomChange(zoomCombo->currentIndex() - 1); });
-
-  // Setup zoom combo box
-  zoomCombo = new QComboBox(this);
-  zoomCombo->setEditable(true); // Make it editable
-  zoomCombo->setInsertPolicy(
-      QComboBox::NoInsert); // Don't add typed text to list
-  zoomCombo->lineEdit()->setAlignment(Qt::AlignCenter); // Center the text
-  zoomCombo->addItems(
-      {"25%", "50%", "75%", "100%", "125%", "150%", "200%", "400%"});
-  zoomCombo->setCurrentText("100%");
-  toolbar->addWidget(zoomCombo);
-
-  // Connect for manual text entry
-  connect(zoomCombo->lineEdit(), &QLineEdit::editingFinished, this, [this]() {
-    QString text = zoomCombo->currentText();
-    if (!text.endsWith('%'))
-      text += '%';
-    handleZoomChange(0); // Index doesn't matter for manual entry
-  });
-
-  // Connect for combo box selection
-  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-          &FilePreview::handleZoomChange);
-
-  // Connect PDF view zoom changes to update the combo box
-  connect(pdfView, &QPdfView::zoomFactorChanged, this, [this](qreal zoom) {
-    int percent = qRound(zoom * 100);
-    zoomCombo->setCurrentText(QString::number(percent) + "%");
-  });
 }
 
 void FilePreview::setupPDFTools() {
@@ -190,6 +191,11 @@ void FilePreview::setupPDFTools() {
       style()->standardIcon(QStyle::SP_ArrowRight), "Next Page");
   connect(nextPage, &QAction::triggered,
           [this]() { pageSpinBox->setValue(pageSpinBox->value() + 1); });
+
+  toolbar->addSeparator();
+
+  // Add zoom combo box to toolbar
+  toolbar->addWidget(zoomCombo);
 
   toolbar->addSeparator();
 
@@ -222,9 +228,6 @@ void FilePreview::setupPDFTools() {
   // Connect signals
   connect(pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
           &FilePreview::handlePageChange);
-
-  connect(zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-          &FilePreview::handleZoomChange);
 
   connect(searchEdit, &QLineEdit::returnPressed, this,
           &FilePreview::handleSearch);
@@ -296,29 +299,213 @@ void FilePreview::loadPDF(const QString &filePath) {
 }
 
 void FilePreview::loadImage(const QString &filePath) {
-  originalPixmap = QPixmap(filePath);
-  currentZoomFactor = 1.0;
+    originalPixmap = QPixmap(filePath);
+    currentZoomFactor = 1.0;
+    imageOffset = QPoint(0, 0);
+    currentImageMode = ImageViewMode::FitToWindow;
+    
+    // Configure image label
+    imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    imageLabel->setMinimumSize(1, 1);
+    imageLabel->setScaledContents(false);
+    imageLabel->setAlignment(Qt::AlignCenter);
+    
+    // Show the image
+    stack->setCurrentWidget(imageLabel);
+    toolbar->setVisible(true);
+    
+    // Setup image-specific tools
+    setupImageTools();
+    
+    // Initial display
+    QTimer::singleShot(0, this, [this]() {
+        updateImageViewMode(ImageViewMode::FitToWindow);
+    });
+}
 
-  imageLabel->setScaledContents(false);
+void FilePreview::fitImageToWindow() {
+    if (originalPixmap.isNull()) return;
+    
+    QSize viewSize = stack->size();
+    if (viewSize.isEmpty()) return;
+    
+    // Calculate the scaling ratio to fit the image within the viewport
+    double widthRatio = static_cast<double>(viewSize.width()) / originalPixmap.width();
+    double heightRatio = static_cast<double>(viewSize.height()) / originalPixmap.height();
+    
+    // Use the smaller ratio to ensure the image fits both dimensions
+    currentZoomFactor = qMin(widthRatio, heightRatio);
+    
+    // Cap the zoom at 100% for small images
+    if (currentZoomFactor > 1.0) currentZoomFactor = 1.0;
+    
+    // Update the zoom combo box text and refresh the display
+    updateZoomComboText(currentZoomFactor);
+    updateImageDisplay();
+}
 
-  updateImageDisplay();
-  stack->setCurrentWidget(imageLabel);
-  toolbar->setVisible(true);
+void FilePreview::setupImageTools() {
+    // Clear existing tools first
+    toolbar->clear();
+    
+    // Add zoom combo box
+    toolbar->addWidget(zoomCombo);
+    toolbar->addSeparator();
+    
+    // Add fit modes
+    QAction* fitWindow = toolbar->addAction("Fit Window");
+    QAction* fitWidth = toolbar->addAction("Fit Width");
+    QAction* fitHeight = toolbar->addAction("Fit Height");
+    
+    connect(fitWindow, &QAction::triggered, this, [this]() {
+        updateImageViewMode(ImageViewMode::FitToWindow);
+    });
+    connect(fitWidth, &QAction::triggered, this, [this]() {
+        updateImageViewMode(ImageViewMode::FitToWidth);
+    });
+    connect(fitHeight, &QAction::triggered, this, [this]() {
+        updateImageViewMode(ImageViewMode::FitToHeight);
+    });
+    
+    // Add dark mode toggle
+    toolbar->addSeparator();
+    toggleDarkModeAction = toolbar->addAction(tr("Dark Mode"));
+    toggleDarkModeAction->setCheckable(true);
+    toggleDarkModeAction->setChecked(isDarkMode);
+}
+
+void FilePreview::updateImageViewMode(ImageViewMode mode) {
+    currentImageMode = mode;
+    
+    switch (mode) {
+        case ImageViewMode::FitToWindow:
+            fitImageToWindow();
+            break;
+        case ImageViewMode::FitToWidth:
+            fitImageToWidth();
+            break;
+        case ImageViewMode::FitToHeight:
+            fitImageToHeight();
+            break;
+        case ImageViewMode::Custom:
+            updateImageDisplay();
+            break;
+    }
+}
+
+void FilePreview::fitImageToWidth() {
+    if (originalPixmap.isNull()) return;
+    
+    QSize viewSize = stack->size();
+    if (viewSize.isEmpty()) return;
+    
+    double widthRatio = static_cast<double>(viewSize.width()) / originalPixmap.width();
+    currentZoomFactor = widthRatio;
+    
+    if (currentZoomFactor > 1.0) currentZoomFactor = 1.0;
+    
+    updateZoomComboText(currentZoomFactor);
+    updateImageDisplay();
+}
+
+void FilePreview::fitImageToHeight() {
+    if (originalPixmap.isNull()) return;
+    
+    QSize viewSize = stack->size();
+    if (viewSize.isEmpty()) return;
+    
+    double heightRatio = static_cast<double>(viewSize.height()) / originalPixmap.height();
+    currentZoomFactor = heightRatio;
+    
+    if (currentZoomFactor > 1.0) currentZoomFactor = 1.0;
+    
+    updateZoomComboText(currentZoomFactor);
+    updateImageDisplay();
+}
+
+void FilePreview::centerImage() {
+    if (originalPixmap.isNull()) return;
+    
+    QSize viewSize = stack->size();
+    QSize scaledSize = calculateImageSize(viewSize, originalPixmap.size());
+    
+    // Center the image in the viewport
+    int x = (viewSize.width() - scaledSize.width()) / 2;
+    int y = (viewSize.height() - scaledSize.height()) / 2;
+    
+    imageOffset = QPoint(x, y);
+}
+
+QSize FilePreview::calculateImageSize(const QSize &viewportSize, const QSize &imageSize) const {
+    QSize scaledSize = imageSize * currentZoomFactor;
+    
+    switch (currentImageMode) {
+        case ImageViewMode::FitToWindow: {
+            double widthRatio = static_cast<double>(viewportSize.width()) / imageSize.width();
+            double heightRatio = static_cast<double>(viewportSize.height()) / imageSize.height();
+            double ratio = qMin(widthRatio, heightRatio);
+            if (ratio > 1.0) ratio = 1.0;
+            scaledSize = imageSize * ratio;
+            break;
+        }
+        case ImageViewMode::FitToWidth: {
+            double ratio = static_cast<double>(viewportSize.width()) / imageSize.width();
+            if (ratio > 1.0) ratio = 1.0;
+            scaledSize = imageSize * ratio;
+            break;
+        }
+        case ImageViewMode::FitToHeight: {
+            double ratio = static_cast<double>(viewportSize.height()) / imageSize.height();
+            if (ratio > 1.0) ratio = 1.0;
+            scaledSize = imageSize * ratio;
+            break;
+        }
+        case ImageViewMode::Custom:
+            // Use the current zoom factor
+            break;
+    }
+    
+    return scaledSize;
 }
 
 void FilePreview::updateImageDisplay() {
-  if (originalPixmap.isNull()) {
-    return;
-  }
-  QSize scaledSize = originalPixmap.size() * currentZoomFactor;
-  QPixmap scaledPixmap = originalPixmap.scaled(scaledSize, Qt::KeepAspectRatio,
-                                               Qt::SmoothTransformation);
-  imageLabel->setPixmap(scaledPixmap);
+    if (originalPixmap.isNull()) return;
+    
+    QSize viewSize = stack->size();
+    if (viewSize.isEmpty()) return;
+    
+    // Calculate the scaled size based on current mode and zoom
+    QSize scaledSize = calculateImageSize(viewSize, originalPixmap.size());
+    
+    // Create scaled pixmap with high-quality scaling
+    QPixmap scaledPixmap = originalPixmap.scaled(scaledSize,
+                                                Qt::KeepAspectRatio,
+                                                Qt::SmoothTransformation);
+    
+    // Center the image
+    centerImage();
+    
+    // Apply dark mode if enabled
+    if (isDarkMode) {
+        QImage image = scaledPixmap.toImage();
+        image.invertPixels();
+        scaledPixmap = QPixmap::fromImage(image);
+    }
+    
+    imageLabel->setPixmap(scaledPixmap);
 }
 
 void FilePreview::resizeEvent(QResizeEvent *event) {
-  QWidget::resizeEvent(event);
-  updateImageDisplay();
+    QWidget::resizeEvent(event);
+    if (stack->currentWidget() == imageLabel) {
+        resizeTimer.stop();
+        resizeTimer.start(RESIZE_TIMER_DELAY);
+        
+        disconnect(&resizeTimer, &QTimer::timeout, nullptr, nullptr);
+        connect(&resizeTimer, &QTimer::timeout, this, [this]() {
+            updateImageViewMode(currentImageMode);
+        });
+    }
 }
 
 void FilePreview::zoomIn() { handleZoom(ZOOM_FACTOR); }
@@ -327,8 +514,11 @@ void FilePreview::zoomOut() { handleZoom(1.0 / ZOOM_FACTOR); }
 
 void FilePreview::handleZoom(qreal factor) {
   if (stack->currentWidget() == imageLabel) {
+    // Calculate new zoom factor with bounds checking
     qreal newZoom = currentZoomFactor * factor;
-    if (newZoom >= MIN_ZOOM && newZoom <= MAX_ZOOM) {
+    newZoom = qBound(MIN_ZOOM, newZoom, MAX_ZOOM);
+    
+    if (newZoom != currentZoomFactor) {
       currentZoomFactor = newZoom;
       updateImageDisplay();
       updateZoomComboText(currentZoomFactor);
@@ -336,7 +526,7 @@ void FilePreview::handleZoom(qreal factor) {
   } else if (stack->currentWidget() == pdfView) {
     qreal currentZoom = pdfView->zoomFactor();
     qreal newZoom = currentZoom * factor;
-
+    
     if (newZoom >= MIN_ZOOM && newZoom <= MAX_ZOOM) {
       pdfView->setZoomMode(QPdfView::ZoomMode::Custom);
       pdfView->setZoomFactor(newZoom);

@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QApplication>
 #include <QStyle>
+#include <QTimer>
 
 DockManager::DockManager(QMainWindow *mainWindow) : QObject(mainWindow), mainWindow(mainWindow)
 {
@@ -238,17 +239,47 @@ void DockManager::createDefaultLayout()
     mainWindow->addDockWidget(Qt::RightDockWidgetArea, contentDock);
     mainWindow->addDockWidget(Qt::BottomDockWidgetArea, terminalDock);
 
-    // Set sizes
-    projectDock->setMinimumWidth(200);
-    projectDock->setMaximumWidth(400);
-    terminalDock->setMinimumHeight(100);
+    // Set more elegant sizes for project tree (VSCode-like)
+    projectDock->setMinimumWidth(100);  // Reduced from 120
+    projectDock->setMaximumWidth(300);  // Reduced from 400
 
-    // Split editor and content view
+    // Set terminal height to about 25% of the window
+    terminalDock->setMinimumHeight(100);
+    terminalDock->resize(terminalDock->width(), mainWindow->height() * 0.25);
+
+    // Split editor and content view horizontally with a 75/25 ratio
     mainWindow->splitDockWidget(editorDock, contentDock, Qt::Horizontal);
+    mainWindow->resizeDocks({editorDock, contentDock}, {75, 25}, Qt::Horizontal);
 
     // Ensure terminal dock is properly set up
     terminalDock->setFeatures(QDockWidget::DockWidgetClosable |
                              QDockWidget::DockWidgetMovable |
                              QDockWidget::DockWidgetFloatable |
                              QDockWidget::DockWidgetVerticalTitleBar);
+
+    // Calculate project width based on 1:6 ratio (slimmer than before)
+    int totalWidth = mainWindow->width();
+    int projectWidth = (totalWidth * 1) / 7;  // 1/(1+6) of total width
+    projectWidth = qMin(projectWidth, 200);  // Cap maximum initial width
+    projectDock->resize(projectWidth, projectDock->height());
+
+    // Set initial sizes for the main areas (1:6 ratio)
+    QList<int> horizontalSizes = {projectWidth, totalWidth - projectWidth};
+    mainWindow->resizeDocks({projectDock}, {projectWidth}, Qt::Horizontal);
+
+    // Ensure the project tree maintains the slim ratio
+    QTimer::singleShot(0, [this, projectDock]() {
+        int preferredWidth = qMin(mainWindow->width() / 7, 200);  // Keep it slim
+        mainWindow->resizeDocks({projectDock}, {preferredWidth}, Qt::Horizontal);
+    });
+}
+
+void DockManager::hideAllDocks()
+{
+    // Hide all dock widgets
+    for (auto dock : dockWidgets.values()) {
+        if (dock) {
+            dock->hide();
+        }
+    }
 }
