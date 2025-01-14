@@ -184,7 +184,7 @@ void BrowserView::setupUI() {
   // Web view
   webView = new QWebEngineView(this);
   page = new CustomWebPage(profile, webView);
-  webView->setPage(new QWebEnginePage(profile, webView));
+  webView->setPage(page);
   // Configure web settings
   webView->settings()->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   webView->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled,

@@ -247,8 +247,17 @@ void LSPClient::sendNotification(const QString &method, const QJsonObject &param
 }
 
 void LSPClient::handleResponse(const QJsonObject &response) {
+    if (!response.contains("id") || !response.contains("result")) {
+        emit serverError("Invalid response format from LSP server");
+        return;
+    }
+    
     int id = response["id"].toInt();
     QString method = m_pendingRequests.take(id);
+    if (method.isEmpty()) {
+        emit serverError("Received response for unknown request");
+        return;
+    }
 
     if (method == "initialize") {
         m_initialized = true;

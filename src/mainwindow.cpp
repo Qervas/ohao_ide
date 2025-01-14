@@ -1,6 +1,8 @@
 #include "mainwindow.h"
+#include "keyboardshortcutsdialog.h"
 #include "preferencesdialog.h"
 #include "sessionsettings.h"
+#include "shortcutmanager.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QContextMenuEvent>
@@ -8,20 +10,20 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScreen>
 #include <QSettings>
+#include <QShortcut>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
-#include <QShortcut>
-#include <QLabel>
-#include <QPushButton>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   // Create components
@@ -85,7 +87,8 @@ void MainWindow::setupUI() {
           &MainWindow::closeTab);
 
   // Connect project tree signals
-  connect(projectTree, &ProjectTree::folderOpened, this, &MainWindow::setInitialDirectory);
+  connect(projectTree, &ProjectTree::folderOpened, this,
+          &MainWindow::setInitialDirectory);
   connect(projectTree, &ProjectTree::fileSelected, this,
           &MainWindow::handleFileSelected);
   connect(projectTree, &ProjectTree::directoryChanged, this,
@@ -134,80 +137,137 @@ void MainWindow::createDockWidgets() {
 
 void MainWindow::createMenus() {
   QMenuBar *menuBar = this->menuBar();
+  auto &shortcutMgr = ShortcutManager::instance();
 
   // File menu
   QMenu *fileMenu = menuBar->addMenu(tr("&File"));
 
   QAction *newAction = fileMenu->addAction(tr("&New File"));
-  newAction->setShortcut(QKeySequence::New);
+  shortcutMgr.registerShortcut("file.new", QKeySequence::New, newAction,
+                               tr("Create new file"));
   connect(newAction, &QAction::triggered, this, &MainWindow::createNewFile);
 
   QAction *openAction = fileMenu->addAction(tr("&Open File..."));
-  openAction->setShortcut(QKeySequence::Open);
+  shortcutMgr.registerShortcut("file.open", QKeySequence::Open, openAction,
+                               tr("Open existing file"));
   connect(openAction, &QAction::triggered, this, &MainWindow::openFile);
 
   QAction *openFolderAction = fileMenu->addAction(tr("Open &Folder..."));
-  openFolderAction->setShortcut(QKeySequence("Ctrl+K, Ctrl+O"));
+  shortcutMgr.registerShortcut("file.openFolder",
+                               QKeySequence("Ctrl+K, Ctrl+O"), openFolderAction,
+                               tr("Open folder as project"));
   connect(openFolderAction, &QAction::triggered, this, &MainWindow::openFolder);
 
-  // Add "Close Folder" action to File menu after "Open Folder"
   QAction *closeFolderAction = fileMenu->addAction(tr("Close Folder"));
-  closeFolderAction->setShortcut(QKeySequence("Ctrl+Shift+W"));
-  connect(closeFolderAction, &QAction::triggered, this, &MainWindow::closeFolder);
+  shortcutMgr.registerShortcut("file.closeFolder", QKeySequence("Ctrl+Shift+W"),
+                               closeFolderAction,
+                               tr("Close current project folder"));
+  connect(closeFolderAction, &QAction::triggered, this,
+          &MainWindow::closeFolder);
 
-  fileMenu->addSeparator();  // Add separator after Close Folder
+  fileMenu->addSeparator();
 
   QAction *saveAction = fileMenu->addAction(tr("&Save"));
-  saveAction->setShortcut(QKeySequence::Save);
+  shortcutMgr.registerShortcut("file.save", QKeySequence::Save, saveAction,
+                               tr("Save current file"));
   connect(saveAction, &QAction::triggered, this, [this]() { saveFile(); });
 
   QAction *saveAsAction = fileMenu->addAction(tr("Save &As..."));
-  saveAsAction->setShortcut(QKeySequence::SaveAs);
+  shortcutMgr.registerShortcut("file.saveAs", QKeySequence::SaveAs,
+                               saveAsAction,
+                               tr("Save current file with a new name"));
   connect(saveAsAction, &QAction::triggered, this, [this]() { saveFileAs(); });
 
   fileMenu->addSeparator();
 
   QAction *exitAction = fileMenu->addAction(tr("E&xit"));
-  exitAction->setShortcut(QKeySequence::Quit);
+  shortcutMgr.registerShortcut("file.exit", QKeySequence::Quit, exitAction,
+                               tr("Exit the application"));
   connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
   // Edit menu
   QMenu *editMenu = menuBar->addMenu(tr("&Edit"));
 
   QAction *undoAction = editMenu->addAction(tr("&Undo"));
-  undoAction->setShortcut(QKeySequence::Undo);
+  shortcutMgr.registerShortcut("edit.undo", QKeySequence::Undo, undoAction,
+                               tr("Undo last action"));
   connect(undoAction, &QAction::triggered, this, &MainWindow::undo);
 
   QAction *redoAction = editMenu->addAction(tr("&Redo"));
-  redoAction->setShortcut(QKeySequence::Redo);
+  shortcutMgr.registerShortcut("edit.redo", QKeySequence::Redo, redoAction,
+                               tr("Redo last undone action"));
   connect(redoAction, &QAction::triggered, this, &MainWindow::redo);
 
   editMenu->addSeparator();
 
   QAction *cutAction = editMenu->addAction(tr("Cu&t"));
-  cutAction->setShortcut(QKeySequence::Cut);
+  shortcutMgr.registerShortcut("edit.cut", QKeySequence::Cut, cutAction,
+                               tr("Cut selected text"));
   connect(cutAction, &QAction::triggered, this, &MainWindow::cut);
 
   QAction *copyAction = editMenu->addAction(tr("&Copy"));
-  copyAction->setShortcut(QKeySequence::Copy);
+  shortcutMgr.registerShortcut("edit.copy", QKeySequence::Copy, copyAction,
+                               tr("Copy selected text"));
   connect(copyAction, &QAction::triggered, this, &MainWindow::copy);
 
   QAction *pasteAction = editMenu->addAction(tr("&Paste"));
-  pasteAction->setShortcut(QKeySequence::Paste);
+  shortcutMgr.registerShortcut("edit.paste", QKeySequence::Paste, pasteAction,
+                               tr("Paste text from clipboard"));
   connect(pasteAction, &QAction::triggered, this, &MainWindow::paste);
+
+  editMenu->addSeparator();
+
+  QAction *findAction = editMenu->addAction(tr("&Find..."));
+  shortcutMgr.registerShortcut("edit.find", QKeySequence::Find, findAction,
+                               tr("Find text in current document"));
+  connect(findAction, &QAction::triggered, this, [this]() {
+    if (CodeEditor *editor = currentEditor()) {
+      editor->showFindDialog();
+    }
+  });
+
+  QAction *findNextAction = editMenu->addAction(tr("Find &Next"));
+  shortcutMgr.registerShortcut("edit.findNext", QKeySequence(Qt::Key_F3),
+                               findNextAction, tr("Find next occurrence"));
+  connect(findNextAction, &QAction::triggered, this, [this]() {
+    if (CodeEditor *editor = currentEditor()) {
+      editor->findNext();
+    }
+  });
+
+  QAction *findPrevAction = editMenu->addAction(tr("Find &Previous"));
+  shortcutMgr.registerShortcut("edit.findPrev",
+                               QKeySequence(Qt::SHIFT | Qt::Key_F3),
+                               findPrevAction, tr("Find previous occurrence"));
+  connect(findPrevAction, &QAction::triggered, this, [this]() {
+    if (CodeEditor *editor = currentEditor()) {
+      editor->findPrevious();
+    }
+  });
+
+  QAction *replaceAction = editMenu->addAction(tr("&Replace..."));
+  shortcutMgr.registerShortcut("edit.replace", QKeySequence::Replace,
+                               replaceAction, tr("Replace text in document"));
+  connect(replaceAction, &QAction::triggered, this, [this]() {
+    if (CodeEditor *editor = currentEditor()) {
+      editor->showReplaceDialog();
+    }
+  });
 
   // View menu
   QMenu *viewMenu = menuBar->addMenu(tr("&View"));
+
   QAction *webBrowserAction = viewMenu->addAction(tr("Web Browser"));
-  webBrowserAction->setShortcut(QKeySequence("Ctrl+Shift+B"));
+  shortcutMgr.registerShortcut("view.webBrowser", QKeySequence("Ctrl+Shift+B"),
+                               webBrowserAction, tr("Open web browser view"));
   connect(webBrowserAction, &QAction::triggered, this, [this]() {
     contentView->loadWebContent("https://www.google.com");
     dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, true);
   });
 
-  // Add dock widget toggles with new syntax
   QAction *projectTreeAction = viewMenu->addAction(tr("Project Tree"));
-  projectTreeAction->setShortcut(QKeySequence("Ctrl+B"));
+  shortcutMgr.registerShortcut("view.projectTree", QKeySequence("Ctrl+B"),
+                               projectTreeAction, tr("Toggle project tree"));
   connect(projectTreeAction, &QAction::triggered, this, [this]() {
     auto dock =
         dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree);
@@ -216,7 +276,8 @@ void MainWindow::createMenus() {
   });
 
   QAction *terminalAction = viewMenu->addAction(tr("Terminal"));
-  terminalAction->setShortcut(QKeySequence("Ctrl+`"));
+  shortcutMgr.registerShortcut("view.terminal", QKeySequence("Ctrl+`"),
+                               terminalAction, tr("Toggle terminal"));
   connect(terminalAction, &QAction::triggered, this, [this]() {
     auto dock =
         dockManager->getDockWidget(DockManager::DockWidgetType::Terminal);
@@ -225,7 +286,8 @@ void MainWindow::createMenus() {
   });
 
   QAction *contentViewAction = viewMenu->addAction(tr("Content View"));
-  contentViewAction->setShortcut(QKeySequence("Ctrl+Shift+V"));
+  shortcutMgr.registerShortcut("view.contentView", QKeySequence("Ctrl+Shift+V"),
+                               contentViewAction, tr("Toggle content view"));
   connect(contentViewAction, &QAction::triggered, this, [this]() {
     auto dock =
         dockManager->getDockWidget(DockManager::DockWidgetType::ContentView);
@@ -246,6 +308,23 @@ void MainWindow::createMenus() {
   QAction *loadLayoutAction = viewMenu->addAction(tr("Load Layout"));
   connect(loadLayoutAction, &QAction::triggered, this, &MainWindow::loadLayout);
 
+  // Settings menu
+  QMenu *settingsMenu = menuBar->addMenu(tr("&Settings"));
+
+  QAction *preferencesAction = settingsMenu->addAction(tr("&Preferences"));
+  shortcutMgr.registerShortcut("settings.preferences",
+                               QKeySequence::Preferences, preferencesAction,
+                               tr("Open preferences dialog"));
+  connect(preferencesAction, &QAction::triggered, this,
+          &MainWindow::showPreferences);
+
+  QAction *shortcutsAction =
+      settingsMenu->addAction(tr("Configure &Keyboard Shortcuts"));
+  connect(shortcutsAction, &QAction::triggered, this, [this]() {
+    KeyboardShortcutsDialog dialog(this);
+    dialog.exec();
+  });
+
   // Help menu
   QMenu *helpMenu = menuBar->addMenu(tr("&Help"));
   helpMenu->addAction(tr("&Shortcuts"), this, &MainWindow::showShortcutsHelp);
@@ -253,27 +332,20 @@ void MainWindow::createMenus() {
 
   // Create Recent Projects submenu
   recentProjectsMenu = new QMenu(tr("Recent Projects"), this);
-  fileMenu->insertMenu(closeFolderAction, recentProjectsMenu);  // Insert before Close Folder
-  
-  // Add Clear Recent Projects action
+  fileMenu->insertMenu(closeFolderAction, recentProjectsMenu);
+
   recentProjectsMenu->addSeparator();
-  QAction *clearRecentAction = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
+  QAction *clearRecentAction =
+      recentProjectsMenu->addAction(tr("Clear Recent Projects"));
   connect(clearRecentAction, &QAction::triggered, this, [this]() {
-      recentProjects.clear();
-      QSettings settings;
-      settings.setValue("recentProjects", recentProjects);
-      updateRecentProjectsMenu();
-      welcomeView->updateRecentProjects(recentProjects);
+    recentProjects.clear();
+    QSettings settings;
+    settings.setValue("recentProjects", recentProjects);
+    updateRecentProjectsMenu();
+    welcomeView->updateRecentProjects(recentProjects);
   });
 
   updateRecentProjectsMenu();
-
-  // Settings menu
-  QMenu *settingsMenu = menuBar->addMenu(tr("&Settings"));
-  QAction *preferencesAction = settingsMenu->addAction(tr("&Preferences"));
-  preferencesAction->setShortcut(QKeySequence::Preferences);
-  connect(preferencesAction, &QAction::triggered, this,
-          &MainWindow::showPreferences);
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent *event) {
@@ -411,14 +483,15 @@ void MainWindow::createStatusBar() {
 void MainWindow::loadSettings() {
   QSettings settings;
   recentProjects = settings.value("recentProjects").toStringList();
-  
+
   // Clean up non-existent paths
-  recentProjects.erase(
-      std::remove_if(recentProjects.begin(), recentProjects.end(),
-          [](const QString &path) { return !QFileInfo(path).exists(); }),
-      recentProjects.end()
-  );
-  
+  recentProjects.erase(std::remove_if(recentProjects.begin(),
+                                      recentProjects.end(),
+                                      [](const QString &path) {
+                                        return !QFileInfo(path).exists();
+                                      }),
+                       recentProjects.end());
+
   // Update UI
   updateRecentProjectsMenu();
   welcomeView->updateRecentProjects(recentProjects);
@@ -471,73 +544,74 @@ bool MainWindow::maybeSave() {
 }
 
 void MainWindow::setInitialDirectory(const QString &path) {
-    if (path.isEmpty() || !QDir(path).exists()) {
-        return;
-    }
+  if (path.isEmpty() || !QDir(path).exists()) {
+    return;
+  }
 
-    // Save current session if needed
-    if (!projectPath.isEmpty()) {
-        saveSettings();
-    }
+  // Save current session if needed
+  if (!projectPath.isEmpty()) {
+    saveSettings();
+  }
 
-    projectTree->setRootPath(path);
-    projectPath = path;
+  projectTree->setRootPath(path);
+  projectPath = path;
 
-    // Update recent projects list
-    recentProjects.removeAll(path);  // Remove if exists
-    recentProjects.prepend(path);    // Add to front
-    while (recentProjects.size() > 10) {
-        recentProjects.removeLast();
-    }
+  // Update recent projects list
+  recentProjects.removeAll(path); // Remove if exists
+  recentProjects.prepend(path);   // Add to front
+  while (recentProjects.size() > 10) {
+    recentProjects.removeLast();
+  }
 
-    // Save settings immediately
-    QSettings settings;
-    settings.setValue("recentProjects", recentProjects);
-    
-    // Update UI
-    updateRecentProjectsMenu();
-    welcomeView->updateRecentProjects(recentProjects);
+  // Save settings immediately
+  QSettings settings;
+  settings.setValue("recentProjects", recentProjects);
 
-    // Switch from welcome view if needed
-    if (centralWidget() == welcomeView) {
-        welcomeView->setParent(nullptr);
-        setCentralWidget(editorTabs);
-    }
+  // Update UI
+  updateRecentProjectsMenu();
+  welcomeView->updateRecentProjects(recentProjects);
 
-    // Check if we have a saved session for this folder
-    QStringList openedFiles;
-    QStringList openedDirs;
-    int currentTabIndex;
-    QMap<QString, SessionSettings::WindowState> windowStates;
-    QByteArray mainWindowGeometry;
-    QByteArray mainWindowState;
+  // Switch from welcome view if needed
+  if (centralWidget() == welcomeView) {
+    welcomeView->setParent(nullptr);
+    setCentralWidget(editorTabs);
+  }
 
-    SessionSettings::instance().loadSession(openedFiles, openedDirs,
+  // Check if we have a saved session for this folder
+  QStringList openedFiles;
+  QStringList openedDirs;
+  int currentTabIndex;
+  QMap<QString, SessionSettings::WindowState> windowStates;
+  QByteArray mainWindowGeometry;
+  QByteArray mainWindowState;
+
+  SessionSettings::instance().loadSession(openedFiles, openedDirs,
                                           currentTabIndex, windowStates,
                                           mainWindowGeometry, mainWindowState);
 
-    if (!mainWindowState.isEmpty() && openedDirs.contains(path)) {
-        // We have a saved session for this folder, restore it
-        restoreState(mainWindowState);
-        if (!mainWindowGeometry.isEmpty()) {
-            restoreGeometry(mainWindowGeometry);
-        }
-    } else {
-        // No saved session, just show the project tree
-        dockManager->hideAllDocks();
-        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
-        
-        // Set a reasonable initial width for project tree
-        if (auto projectDock = dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree)) {
-            projectDock->setMinimumWidth(100);
-            projectDock->setMaximumWidth(300);
-            int preferredWidth = qMin(width() / 7, 200);  // 1:7 ratio, max 200px
-            projectDock->resize(preferredWidth, projectDock->height());
-        }
+  if (!mainWindowState.isEmpty() && openedDirs.contains(path)) {
+    // We have a saved session for this folder, restore it
+    restoreState(mainWindowState);
+    if (!mainWindowGeometry.isEmpty()) {
+      restoreGeometry(mainWindowGeometry);
     }
-    
-    // Update window title
-    setWindowTitle(QString("ohao IDE - %1").arg(QDir(path).dirName()));
+  } else {
+    // No saved session, just show the project tree
+    dockManager->hideAllDocks();
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+
+    // Set a reasonable initial width for project tree
+    if (auto projectDock = dockManager->getDockWidget(
+            DockManager::DockWidgetType::ProjectTree)) {
+      projectDock->setMinimumWidth(100);
+      projectDock->setMaximumWidth(300);
+      int preferredWidth = qMin(width() / 7, 200); // 1:7 ratio, max 200px
+      projectDock->resize(preferredWidth, projectDock->height());
+    }
+  }
+
+  // Update window title
+  setWindowTitle(QString("ohao IDE - %1").arg(QDir(path).dirName()));
 }
 
 void MainWindow::handleFileSelected(const QString &filePath) {
@@ -617,19 +691,9 @@ void MainWindow::openFile() {
     loadFile(fileName);
 }
 
-void MainWindow::openFolder() {
-  projectTree->openFolder();
-}
+void MainWindow::openFolder() { projectTree->openFolder(); }
 
 void MainWindow::loadFile(const QString &filePath) {
-  QFileInfo fileInfo(filePath);
-
-  // Hide welcome view if it's still showing
-  if (centralWidget() == welcomeView) {
-    welcomeView->setParent(nullptr);
-    setCentralWidget(editorTabs);
-  }
-
   // Show project tree
   dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
 
@@ -658,21 +722,23 @@ void MainWindow::loadFile(const QString &filePath) {
   QFile file(filePath);
   if (!file.open(QFile::ReadOnly | QFile::Text)) {
     QMessageBox::warning(
-        this, tr("Application"),
-        tr("Cannot read file %1:\n%2.")
-            .arg(QDir::toNativeSeparators(filePath), file.errorString()));
+        this, tr("Error"),
+        tr("Cannot open file %1:\n%2.").arg(filePath).arg(file.errorString()));
     return;
   }
 
-  QTextStream in(&file);
+  // Create new editor tab without dock
   CodeEditor *editor = new CodeEditor(this);
-  editor->setPlainText(in.readAll());
   editor->setProperty("filePath", filePath);
+  editor->setWorkingDirectory(QFileInfo(filePath).absolutePath());
 
-  int index = editorTabs->addTab(editor, fileInfo.fileName());
-  editorTabs->setCurrentIndex(index);
+  QTextStream in(&file);
+  editor->setPlainText(in.readAll());
 
-  statusBar()->showMessage(tr("File loaded"), 2000);
+  QString fileName = QFileInfo(filePath).fileName();
+  editorTabs->addTab(editor, fileName);
+  editorTabs->setCurrentWidget(editor);
+  editor->setFocus();
 }
 
 bool MainWindow::saveFile() {
@@ -777,22 +843,22 @@ void MainWindow::updateRecentProjectsMenu() {
   for (const QString &path : recentProjects) {
     QFileInfo fileInfo(path);
     if (fileInfo.exists()) {
-      QString displayName = fileInfo.fileName();  // Show folder name
+      QString displayName = fileInfo.fileName(); // Show folder name
       QAction *action = recentProjectsMenu->addAction(displayName);
-      action->setData(path);  // Store full path
-      action->setToolTip(path);  // Show full path on hover
-      connect(action, &QAction::triggered, this, [this, path]() {
-        setInitialDirectory(path);
-      });
+      action->setData(path);    // Store full path
+      action->setToolTip(path); // Show full path on hover
+      connect(action, &QAction::triggered, this,
+              [this, path]() { setInitialDirectory(path); });
     }
   }
 
   if (!recentProjects.isEmpty()) {
     recentProjectsMenu->addSeparator();
   }
-  
+
   // Add Clear Recent Projects action
-  QAction *clearRecentAction = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
+  QAction *clearRecentAction =
+      recentProjectsMenu->addAction(tr("Clear Recent Projects"));
   connect(clearRecentAction, &QAction::triggered, this, [this]() {
     recentProjects.clear();
     QSettings settings;
@@ -812,8 +878,10 @@ void MainWindow::showPreferences() {
     settings.setValue("editor/fontFamily", dialog.getFontFamily());
     settings.setValue("editor/fontSize", dialog.getFontSize());
     settings.setValue("editor/wordWrap", dialog.getWordWrap());
-    settings.setValue("editor/intelligentIndent", dialog.getIntelligentIndent());
-    settings.setValue("editor/syntaxHighlighting", dialog.getSyntaxHighlighting());
+    settings.setValue("editor/intelligentIndent",
+                      dialog.getIntelligentIndent());
+    settings.setValue("editor/syntaxHighlighting",
+                      dialog.getSyntaxHighlighting());
     applyEditorSettings();
   }
 }
@@ -823,15 +891,18 @@ void MainWindow::applyEditorSettings() {
   QFont font(settings.value("editor/fontFamily", "Monospace").toString());
   font.setPointSize(settings.value("editor/fontSize", 11).toInt());
   bool wordWrap = settings.value("editor/wordWrap", true).toBool();
-  bool intelligentIndent = settings.value("editor/intelligentIndent", true).toBool();
-  bool syntaxHighlighting = settings.value("editor/syntaxHighlighting", true).toBool();
+  bool intelligentIndent =
+      settings.value("editor/intelligentIndent", true).toBool();
+  bool syntaxHighlighting =
+      settings.value("editor/syntaxHighlighting", true).toBool();
 
   // Apply to all open editors
   for (int i = 0; i < editorTabs->count(); ++i) {
-    if (CodeEditor *editor = qobject_cast<CodeEditor*>(editorTabs->widget(i))) {
+    if (CodeEditor *editor =
+            qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
       editor->setFont(font);
       editor->setLineWrapMode(wordWrap ? QPlainTextEdit::WidgetWidth
-                                     : QPlainTextEdit::NoWrap);
+                                       : QPlainTextEdit::NoWrap);
       editor->setIntelligentIndent(intelligentIndent);
       editor->setSyntaxHighlighting(syntaxHighlighting);
     }
@@ -878,251 +949,257 @@ void MainWindow::saveSessionState() {
 }
 
 void MainWindow::loadSessionState() {
-    QStringList openedFiles;
-    QStringList openedDirs;
-    int currentTabIndex;
-    QMap<QString, SessionSettings::WindowState> windowStates;
-    QByteArray mainWindowGeometry;
-    QByteArray mainWindowState;
+  QStringList openedFiles;
+  QStringList openedDirs;
+  int currentTabIndex;
+  QMap<QString, SessionSettings::WindowState> windowStates;
+  QByteArray mainWindowGeometry;
+  QByteArray mainWindowState;
 
-    SessionSettings::instance().loadSession(openedFiles, openedDirs,
-                                         currentTabIndex, windowStates,
-                                         mainWindowGeometry, mainWindowState);
+  SessionSettings::instance().loadSession(openedFiles, openedDirs,
+                                          currentTabIndex, windowStates,
+                                          mainWindowGeometry, mainWindowState);
 
-    // First restore the main window geometry and state
-    if (!mainWindowGeometry.isEmpty()) {
-        restoreGeometry(mainWindowGeometry);
+  // First restore the main window geometry and state
+  if (!mainWindowGeometry.isEmpty()) {
+    restoreGeometry(mainWindowGeometry);
+  }
+
+  // Load directories first
+  for (const QString &dir : openedDirs) {
+    if (QDir(dir).exists()) {
+      // Just set the root path without applying default layout
+      projectTree->setRootPath(dir);
+      projectPath = dir;
     }
-    
-    // Load directories first
-    for (const QString &dir : openedDirs) {
-        if (QDir(dir).exists()) {
-            // Just set the root path without applying default layout
-            projectTree->setRootPath(dir);
-            projectPath = dir;
+  }
+
+  // Restore the main window state (includes dock positions and sizes)
+  if (!mainWindowState.isEmpty()) {
+    restoreState(mainWindowState);
+
+    // Fine-tune project tree width if it exists
+    if (auto projectDock = dockManager->getDockWidget(
+            DockManager::DockWidgetType::ProjectTree)) {
+      projectDock->setMinimumWidth(100);
+      projectDock->setMaximumWidth(300);
+      int preferredWidth = qMin(width() / 7, 200); // 1:7 ratio, max 200px
+      projectDock->resize(preferredWidth, projectDock->height());
+    }
+  }
+
+  // Load files
+  for (const QString &file : openedFiles) {
+    if (QFileInfo(file).exists()) {
+      loadFile(file);
+    }
+  }
+
+  // Set current tab
+  if (currentTabIndex >= 0 && currentTabIndex < editorTabs->count()) {
+    editorTabs->setCurrentIndex(currentTabIndex);
+  }
+
+  // Restore specific dock states
+  if (!windowStates.isEmpty()) {
+    const auto &contentViewState = windowStates.value("contentView");
+    if (contentView && contentViewState.isVisible) {
+      // Restore tabs
+      contentView->restoreTabStates(contentViewState.tabStates);
+
+      // Restore dock state
+      if (auto dock = dockManager->getDockWidget(
+              DockManager::DockWidgetType::ContentView)) {
+        dock->setVisible(true);
+        if (!contentViewState.geometry.isEmpty()) {
+          dock->restoreGeometry(contentViewState.geometry);
         }
+      }
     }
+  }
 
-    // Restore the main window state (includes dock positions and sizes)
-    if (!mainWindowState.isEmpty()) {
-        restoreState(mainWindowState);
-        
-        // Fine-tune project tree width if it exists
-        if (auto projectDock = dockManager->getDockWidget(DockManager::DockWidgetType::ProjectTree)) {
-            projectDock->setMinimumWidth(100);
-            projectDock->setMaximumWidth(300);
-            int preferredWidth = qMin(width() / 7, 200);  // 1:7 ratio, max 200px
-            projectDock->resize(preferredWidth, projectDock->height());
-        }
-    }
-
-    // Load files
-    for (const QString &file : openedFiles) {
-        if (QFileInfo(file).exists()) {
-            loadFile(file);
-        }
-    }
-
-    // Set current tab
-    if (currentTabIndex >= 0 && currentTabIndex < editorTabs->count()) {
-        editorTabs->setCurrentIndex(currentTabIndex);
-    }
-
-    // Restore specific dock states
-    if (!windowStates.isEmpty()) {
-        const auto &contentViewState = windowStates.value("contentView");
-        if (contentView && contentViewState.isVisible) {
-            // Restore tabs
-            contentView->restoreTabStates(contentViewState.tabStates);
-
-            // Restore dock state
-            if (auto dock = dockManager->getDockWidget(DockManager::DockWidgetType::ContentView)) {
-                dock->setVisible(true);
-                if (!contentViewState.geometry.isEmpty()) {
-                    dock->restoreGeometry(contentViewState.geometry);
-                }
-            }
-        }
-    }
-
-    // Update window title
-    if (!projectPath.isEmpty()) {
-        setWindowTitle(QString("ohao IDE - %1").arg(QDir(projectPath).dirName()));
-    }
+  // Update window title
+  if (!projectPath.isEmpty()) {
+    setWindowTitle(QString("ohao IDE - %1").arg(QDir(projectPath).dirName()));
+  }
 }
 
 void MainWindow::closeFolder() {
   // Save current session state before closing
   saveSettings();
-  
+
   // Clear current project path
   projectPath.clear();
   projectTree->setRootPath("");
-  
+
   // Clear all editors
   while (editorTabs->count() > 0) {
     closeTab(0);
   }
-  
+
   // Switch back to welcome view
   if (welcomeView) {
     editorTabs->setParent(nullptr);
     setCentralWidget(welcomeView);
     welcomeView->updateRecentProjects(recentProjects);
   }
-  
+
   // Hide project tree
   dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
-  
+
   // Update window title
   setWindowTitle("ohao IDE");
 }
 
 void MainWindow::setupGlobalShortcuts() {
-    // Focus shortcuts
-    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_1), this, this, &MainWindow::focusEditor);
-    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_0), this, this, &MainWindow::focusProjectTree);
-    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_QuoteLeft), this, this, &MainWindow::focusTerminal);
-    
-    // Global Ctrl+W and Ctrl+N
-    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this, this, &MainWindow::handleCtrlW);
-    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_N), this, this, &MainWindow::handleCtrlN);
+  // Focus shortcuts
+  new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_1), this, this,
+                &MainWindow::focusEditor);
+  new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_0), this, this,
+                &MainWindow::focusProjectTree);
+  new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_QuoteLeft), this, this,
+                &MainWindow::focusTerminal);
+
+  // Global Ctrl+W and Ctrl+N
+  new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this, this,
+                &MainWindow::handleCtrlW);
+  new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_N), this, this,
+                &MainWindow::handleCtrlN);
 }
 
 void MainWindow::setupFocusTracking() {
-    qApp->installEventFilter(this);
-    connect(qApp, &QApplication::focusChanged, this, &MainWindow::handleFocusChange);
+  qApp->installEventFilter(this);
+  connect(qApp, &QApplication::focusChanged, this,
+          &MainWindow::handleFocusChange);
 }
 
 void MainWindow::handleFocusChange(QWidget *old, QWidget *now) {
-    if (now) {
-        currentFocusWidget = now;
-        // Update UI to show which panel is focused (optional)
-    }
+  if (now) {
+    currentFocusWidget = now;
+    // Update UI to show which panel is focused (optional)
+  }
 }
 
 void MainWindow::focusEditor() {
-    if (editorTabs && editorTabs->count() > 0) {
-        if (auto editor = qobject_cast<CodeEditor*>(editorTabs->currentWidget())) {
-            editor->setFocus();
-        }
+  if (editorTabs && editorTabs->count() > 0) {
+    if (auto editor = qobject_cast<CodeEditor *>(editorTabs->currentWidget())) {
+      editor->setFocus();
     }
+  }
 }
 
 void MainWindow::focusProjectTree() {
-    if (projectTree) {
-        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
-        projectTree->setFocus();
-    }
+  if (projectTree) {
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
+    projectTree->setFocus();
+  }
 }
 
 void MainWindow::focusTerminal() {
-    if (auto terminal = dockManager->getTerminalWidget()) {
-        dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, true);
-        terminal->setFocus();
-    }
+  if (auto terminal = dockManager->getTerminalWidget()) {
+    dockManager->setDockVisible(DockManager::DockWidgetType::Terminal, true);
+    terminal->setFocus();
+  }
 }
 
 void MainWindow::focusContentView() {
-    if (contentView) {
-        dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, true);
-        contentView->setFocus();
-    }
+  if (contentView) {
+    dockManager->setDockVisible(DockManager::DockWidgetType::ContentView, true);
+    contentView->setFocus();
+  }
 }
 
 void MainWindow::handleCtrlW() {
-    // Handle close based on what's focused
-    if (!currentFocusWidget) return;
+  // Handle close based on what's focused
+  if (!currentFocusWidget)
+    return;
 
-    if (auto editor = qobject_cast<CodeEditor*>(currentFocusWidget)) {
-        closeTab(editorTabs->currentIndex());
+  if (auto editor = qobject_cast<CodeEditor *>(currentFocusWidget)) {
+    closeTab(editorTabs->currentIndex());
+  } else if (auto terminal =
+                 qobject_cast<TerminalWidget *>(currentFocusWidget)) {
+    terminal->close();
+  } else if (auto browser = qobject_cast<BrowserView *>(currentFocusWidget)) {
+    if (contentView) {
+      contentView->closeCurrentTab();
     }
-    else if (auto terminal = qobject_cast<TerminalWidget*>(currentFocusWidget)) {
-        terminal->close();
-    }
-    else if (auto browser = qobject_cast<BrowserView*>(currentFocusWidget)) {
-        if (contentView) {
-            contentView->closeCurrentTab();
-        }
-    }
-    else if (projectTree && projectTree->isAncestorOf(currentFocusWidget)) {
-        dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, false);
-    }
+  } else if (projectTree && projectTree->isAncestorOf(currentFocusWidget)) {
+    dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree,
+                                false);
+  }
 }
 
 void MainWindow::handleCtrlN() {
-    // Handle new item based on what's focused
-    if (!currentFocusWidget) return;
+  // Handle new item based on what's focused
+  if (!currentFocusWidget)
+    return;
 
-    if (qobject_cast<CodeEditor*>(currentFocusWidget)) {
-        createNewFile();
+  if (qobject_cast<CodeEditor *>(currentFocusWidget)) {
+    createNewFile();
+  } else if (qobject_cast<TerminalWidget *>(currentFocusWidget)) {
+    dockManager->createNewTerminal();
+  } else if (qobject_cast<BrowserView *>(currentFocusWidget)) {
+    if (contentView) {
+      contentView->loadWebContent("https://www.google.com");
     }
-    else if (qobject_cast<TerminalWidget*>(currentFocusWidget)) {
-        dockManager->createNewTerminal();
-    }
-    else if (qobject_cast<BrowserView*>(currentFocusWidget)) {
-        if (contentView) {
-            contentView->loadWebContent("https://www.google.com");
-        }
-    }
+  }
 }
 
 void MainWindow::showShortcutsHelp() {
-    QDialog *dialog = new QDialog(this);
-    dialog->setWindowTitle(tr("Keyboard Shortcuts"));
-    dialog->setMinimumWidth(400);
+  QDialog *dialog = new QDialog(this);
+  dialog->setWindowTitle(tr("Keyboard Shortcuts"));
+  dialog->setMinimumWidth(400);
 
-    QVBoxLayout *layout = new QVBoxLayout(dialog);
-    
-    QLabel *label = new QLabel(dialog);
-    label->setText(
-        "<h3>Navigation</h3>"
-        "<p><b>Ctrl+1</b> - Focus editor</p>"
-        "<p><b>Ctrl+0</b> - Focus project tree</p>"
-        "<p><b>Ctrl+`</b> - Focus terminal</p>"
-        "<p><b>Ctrl+B</b> - Toggle project tree</p>"
-        "<p><b>Ctrl+Shift+B</b> - Open web browser</p>"
-        "<p><b>Ctrl+`</b> - Toggle terminal</p>"
-        "<br>"
-        "<h3>Tabs & Windows</h3>"
-        "<p><b>Ctrl+W</b> - Close current tab/panel (context-aware)</p>"
-        "<p><b>Ctrl+N</b> - New item (context-aware):</p>"
-        "<ul>"
-        "<li>Editor: New file</li>"
-        "<li>Terminal: New terminal</li>"
-        "<li>Browser: New browser tab</li>"
-        "</ul>"
-        "<br>"
-        "<h3>File Operations</h3>"
-        "<p><b>Ctrl+S</b> - Save file</p>"
-        "<p><b>Ctrl+Shift+S</b> - Save as</p>"
-        "<p><b>Ctrl+O</b> - Open file</p>"
-        "<p><b>Ctrl+K, Ctrl+O</b> - Open folder</p>"
-        "<p><b>Ctrl+Shift+W</b> - Close folder</p>"
-        "<br>"
-        "<h3>Search & Replace</h3>"
-        "<p><b>Ctrl+F</b> - Find</p>"
-        "<p><b>F3</b> - Find next</p>"
-        "<p><b>Shift+F3</b> - Find previous</p>"
-        "<p><b>Ctrl+H</b> - Replace</p>"
-        "<br>"
-        "<h3>Editor</h3>"
-        "<p><b>Tab</b> - Indent selection</p>"
-        "<p><b>Shift+Tab</b> - Unindent selection</p>"
-        "<p><b>Enter</b> - Smart new line (maintains indentation)</p>"
-        "<p><b>Backspace</b> - Smart backspace (removes entire indent level)</p>"
-        "<p><b>Ctrl+/</b> - Toggle line comment</p>"
-    );
-    label->setTextFormat(Qt::RichText);
-    label->setWordWrap(true);
-    
-    layout->addWidget(label);
-    
-    QPushButton *closeButton = new QPushButton(tr("Close"), dialog);
-    connect(closeButton, &QPushButton::clicked, dialog, &QDialog::accept);
-    layout->addWidget(closeButton, 0, Qt::AlignRight);
+  QVBoxLayout *layout = new QVBoxLayout(dialog);
 
-    dialog->setLayout(layout);
-    dialog->exec();
-    delete dialog;
+  QLabel *label = new QLabel(dialog);
+  label->setText(
+      "<h3>Navigation</h3>"
+      "<p><b>Ctrl+1</b> - Focus editor</p>"
+      "<p><b>Ctrl+0</b> - Focus project tree</p>"
+      "<p><b>Ctrl+`</b> - Focus terminal</p>"
+      "<p><b>Ctrl+B</b> - Toggle project tree</p>"
+      "<p><b>Ctrl+Shift+B</b> - Open web browser</p>"
+      "<p><b>Ctrl+`</b> - Toggle terminal</p>"
+      "<br>"
+      "<h3>Tabs & Windows</h3>"
+      "<p><b>Ctrl+W</b> - Close current tab/panel (context-aware)</p>"
+      "<p><b>Ctrl+N</b> - New item (context-aware):</p>"
+      "<ul>"
+      "<li>Editor: New file</li>"
+      "<li>Terminal: New terminal</li>"
+      "<li>Browser: New browser tab</li>"
+      "</ul>"
+      "<br>"
+      "<h3>File Operations</h3>"
+      "<p><b>Ctrl+S</b> - Save file</p>"
+      "<p><b>Ctrl+Shift+S</b> - Save as</p>"
+      "<p><b>Ctrl+O</b> - Open file</p>"
+      "<p><b>Ctrl+K, Ctrl+O</b> - Open folder</p>"
+      "<p><b>Ctrl+Shift+W</b> - Close folder</p>"
+      "<br>"
+      "<h3>Search & Replace</h3>"
+      "<p><b>Ctrl+F</b> - Find</p>"
+      "<p><b>F3</b> - Find next</p>"
+      "<p><b>Shift+F3</b> - Find previous</p>"
+      "<p><b>Ctrl+H</b> - Replace</p>"
+      "<br>"
+      "<h3>Editor</h3>"
+      "<p><b>Tab</b> - Indent selection</p>"
+      "<p><b>Shift+Tab</b> - Unindent selection</p>"
+      "<p><b>Enter</b> - Smart new line (maintains indentation)</p>"
+      "<p><b>Backspace</b> - Smart backspace (removes entire indent level)</p>"
+      "<p><b>Ctrl+/</b> - Toggle line comment</p>");
+  label->setTextFormat(Qt::RichText);
+  label->setWordWrap(true);
+
+  layout->addWidget(label);
+
+  QPushButton *closeButton = new QPushButton(tr("Close"), dialog);
+  connect(closeButton, &QPushButton::clicked, dialog, &QDialog::accept);
+  layout->addWidget(closeButton, 0, Qt::AlignRight);
+
+  dialog->setLayout(layout);
+  dialog->exec();
+  delete dialog;
 }
