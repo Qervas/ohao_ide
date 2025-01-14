@@ -1,69 +1,49 @@
 cmake_minimum_required(VERSION 3.16)
-project(ohao_IDE VERSION 1.0.4 LANGUAGES CXX)
-
-include(GNUInstallDirs)
+project(ohao-ide VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Find required Qt packages
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Pdf PdfWidgets WebEngineCore WebEngineWidgets Gui PrintSupport)
+find_package(Qt6 REQUIRED COMPONENTS 
+    Widgets 
+    Core 
+    Gui 
+    Network
+    WebEngineCore
+    WebEngineWidgets
+    Pdf
+    PdfWidgets
+)
+qt_standard_project_setup()
 
-# Automatically find all source and header files
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-file(GLOB_RECURSE HEADERS "src/*.h" "src/*.hpp")
+# Automatically find all source files recursively
+file(GLOB_RECURSE PROJECT_SOURCES
+    src/*.cpp
+    src/*.h
+)
 
-# Print found files for debugging
-message("Found source files: ${SOURCES}")
-message("Found header files: ${HEADERS}")
+qt_add_executable(ohao-ide
+    ${PROJECT_SOURCES}
+)
 
-# Create executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+# Add include directories
+target_include_directories(ohao-ide PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
-# Link Qt libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    Qt6::Core
+target_link_libraries(ohao-ide PRIVATE
     Qt6::Widgets
+    Qt6::Core
+    Qt6::Gui
     Qt6::Network
-    Qt6::Pdf
-    Qt6::PdfWidgets
     Qt6::WebEngineCore
     Qt6::WebEngineWidgets
-    Qt6::Gui
-    Qt6::PrintSupport
+    Qt6::Pdf
+    Qt6::PdfWidgets
 )
 
-# Add include directories for Qt
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${Qt6Core_INCLUDE_DIRS}
-    ${Qt6Widgets_INCLUDE_DIRS}
-    ${Qt6Network_INCLUDE_DIRS}
-    ${Qt6Pdf_INCLUDE_DIRS}
-    ${Qt6PdfWidgets_INCLUDE_DIRS}
-    ${Qt6WebEngineCore_INCLUDE_DIRS}
-    ${Qt6WebEngineWidgets_INCLUDE_DIRS}
-    ${Qt6Gui_INCLUDE_DIRS}
-    ${Qt6PrintSupport_INCLUDE_DIRS}
-)
-
-# Installation rules with proper destinations
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ohao-ide
+    BUNDLE DESTINATION .
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-# Install documentation files
-install(FILES
-    LICENSE
-    README.md
-    DESTINATION ${CMAKE_INSTALL_DOCDIR}
-)
-
-# Add resource files installation if needed
-install(FILES resources.qrc
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 )

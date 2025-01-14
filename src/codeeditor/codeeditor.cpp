@@ -1,4 +1,5 @@
 #include "codeeditor.h"
+#include "customtextedit.h"
 #include "highlighters/cpphighlighter.h"
 #include <QCheckBox>
 #include <QDialog>
@@ -23,148 +24,6 @@
 #include <QJsonValue>
 #include <QDir>
 
-CustomPlainTextEdit::CustomPlainTextEdit(QWidget *parent)
-    : QPlainTextEdit(parent), m_hoverTimer(nullptr) {
-}
-
-CustomPlainTextEdit::~CustomPlainTextEdit() {
-    if (m_hoverTimer) {
-        m_hoverTimer->stop();
-        delete m_hoverTimer;
-    }
-}
-
-void CustomPlainTextEdit::keyPressEvent(QKeyEvent *e) {
-  CodeEditor *editor = qobject_cast<CodeEditor *>(parent());
-  if (!editor) {
-    QPlainTextEdit::keyPressEvent(e);
-    return;
-  }
-
-  // Handle Home key
-  if (e->key() == Qt::Key_Home && !(e->modifiers() & Qt::ControlModifier)) {
-    QTextCursor cursor = textCursor();
-    int originalPosition = cursor.position();
-    cursor.movePosition(QTextCursor::StartOfLine);
-    int startOfLine = cursor.position();
-    
-    // Get the text of the current line
-    QString lineText = cursor.block().text();
-    
-    // Find the first non-whitespace character
-    int firstNonSpace = 0;
-    while (firstNonSpace < lineText.length() && lineText[firstNonSpace].isSpace()) {
-      firstNonSpace++;
-    }
-    
-    // If we're already at the first non-space character, move to start of line
-    // Or if we're at the start of line, move to first non-space
-    if (originalPosition == startOfLine + firstNonSpace) {
-      cursor.setPosition(startOfLine);
-    } else {
-      cursor.setPosition(startOfLine + firstNonSpace);
-    }
-    
-    // Handle shift selection
-    if (e->modifiers() & Qt::ShiftModifier) {
-      cursor.setPosition(cursor.position(), QTextCursor::KeepAnchor);
-    }
-    
-    setTextCursor(cursor);
-    e->accept();
-    return;
-  }
-
-  // Handle auto-pairing first, before any other key handling
-  QString text = e->text();
-  if (text.length() == 1) {
-    QChar ch = text[0];
-    // Check for any pairing character including quotes
-    if (ch == '(' || ch == '[' || ch == '{' || ch == '"' || ch == '\'' ||
-        ch == '`' || ch == ')' || ch == ']' || ch == '}') {
-      if (editor->handleAutoPair(e)) {
-        e->accept();
-        return;
-      }
-    }
-  }
-
-  // Handle other special keys
-  if ((e->key() == Qt::Key_Tab || e->key() == Qt::Key_Backtab) && editor->isIntelligentIndentEnabled()) {
-    bool isShiftTab = (e->key() == Qt::Key_Backtab) || (e->key() == Qt::Key_Tab && (e->modifiers() & Qt::ShiftModifier));
-    editor->handleIndent(!isShiftTab);
-    e->accept();
-    return;
-  } else if (e->key() == Qt::Key_Return && editor->isIntelligentIndentEnabled()) {
-    editor->handleNewLine();
-    e->accept();
-    return;
-  } else if (e->key() == Qt::Key_Backspace && editor->isIntelligentIndentEnabled()) {
-    if (editor->handleSmartBackspace()) {
-      e->accept();
-      return;
-    }
-  }
-
-  QPlainTextEdit::keyPressEvent(e);
-}
-
-void CustomPlainTextEdit::mousePressEvent(QMouseEvent *e) {
-  CodeEditor *editor = qobject_cast<CodeEditor *>(parent());
-  if (!editor) {
-    QPlainTextEdit::mousePressEvent(e);
-    return;
-  }
-
-  // Handle Ctrl+Click for goto definition
-  if (e->button() == Qt::LeftButton && e->modifiers() & Qt::ControlModifier) {
-    QTextCursor cursor = cursorForPosition(e->pos());
-    setTextCursor(cursor);
-    editor->requestDefinition();
-    e->accept();
-    return;
-  }
-
-  QPlainTextEdit::mousePressEvent(e);
-}
-
-void CustomPlainTextEdit::mouseMoveEvent(QMouseEvent *e) {
-  CodeEditor *editor = qobject_cast<CodeEditor *>(parent());
-  if (!editor) {
-    QPlainTextEdit::mouseMoveEvent(e);
-    return;
-  }
-
-  // Show hand cursor when Ctrl is pressed and hovering over text
-  if (e->modifiers() & Qt::ControlModifier) {
-    QTextCursor cursor = cursorForPosition(e->pos());
-    QString word = editor->getWordUnderCursor(cursor);
-    if (!word.isEmpty()) {
-      viewport()->setCursor(Qt::PointingHandCursor);
-    } else {
-      viewport()->setCursor(Qt::IBeamCursor);
-    }
-  } else {
-    viewport()->setCursor(Qt::IBeamCursor);
-  }
-
-  // Request hover information
-  if (m_hoverTimer) {
-    m_hoverTimer->stop();
-  } else {
-    m_hoverTimer = new QTimer(this);
-    m_hoverTimer->setSingleShot(true);
-    connect(m_hoverTimer, &QTimer::timeout, [this, editor]() {
-      QPoint pos = mapFromGlobal(QCursor::pos());
-      QTextCursor cursor = cursorForPosition(pos);
-      editor->requestHover(cursor);
-    });
-  }
-  m_hoverTimer->start(500); // 500ms delay before showing hover
-
-  QPlainTextEdit::mouseMoveEvent(e);
-}
-
 CodeEditor::CodeEditor(QWidget *parent)
     : DockWidgetBase(parent), m_intelligentIndent(true), bracketRoot(nullptr),
       m_lspClient(new LSPClient(this)), m_serverInitialized(false) {
@@ -175,6 +34,10 @@ CodeEditor::CodeEditor(QWidget *parent)
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_editor);
+
+    // Initialize dialogs to nullptr
+    m_findDialog = nullptr;
+    m_replaceDialog = nullptr;
 
     // Set up editor properties
     QFont font("Monospace");
@@ -252,6 +115,16 @@ CodeEditor::CodeEditor(QWidget *parent)
           toggleFold(block);
       }
   });
+
+  // Add search shortcuts
+  QShortcut *findShortcut = new QShortcut(QKeySequence::Find, this);
+  connect(findShortcut, &QShortcut::activated, this, &CodeEditor::showFindDialog);
+
+  QShortcut *findNextShortcut = new QShortcut(QKeySequence(Qt::Key_F3), this);
+  connect(findNextShortcut, &QShortcut::activated, this, &CodeEditor::findNext);
+
+  QShortcut *findPrevShortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F3), this);
+  connect(findPrevShortcut, &QShortcut::activated, this, &CodeEditor::findPrevious);
 }
 
 CodeEditor::~CodeEditor() {
@@ -264,96 +137,98 @@ CodeEditor::~CodeEditor() {
 }
 
 void CodeEditor::setupUI() {
-  // Set up search shortcuts
-  QShortcut *findShortcut = new QShortcut(QKeySequence::Find, this);
-  connect(findShortcut, &QShortcut::activated, this,
-          &CodeEditor::showFindDialog);
-
-  QShortcut *findNextShortcut = new QShortcut(QKeySequence::FindNext, this);
-  connect(findNextShortcut, &QShortcut::activated, this, &CodeEditor::findNext);
-
-  QShortcut *findPrevShortcut = new QShortcut(QKeySequence::FindPrevious, this);
-  connect(findPrevShortcut, &QShortcut::activated, this,
-          &CodeEditor::findPrevious);
-
-  QShortcut *replaceShortcut = new QShortcut(QKeySequence::Replace, this);
-  connect(replaceShortcut, &QShortcut::activated, this,
-          &CodeEditor::showReplaceDialog);
-
-  setupSearchDialogs();
+    // Remove duplicate shortcut setup from here since we're moving it to setupSearchDialogs
+    setupSearchDialogs();
 }
 
 void CodeEditor::setupSearchDialogs() {
-  // Find Dialog
-  m_findDialog = new QDialog(this);
-  m_findDialog->setWindowTitle(tr("Find"));
-  QVBoxLayout *findLayout = new QVBoxLayout(m_findDialog);
+    if (!m_findDialog) {
+        // Find Dialog
+        m_findDialog = new QDialog(this);
+        m_findDialog->setWindowTitle(tr("Find"));
+        QVBoxLayout *findLayout = new QVBoxLayout(m_findDialog);
 
-  QHBoxLayout *findInputLayout = new QHBoxLayout;
-  m_findLineEdit = new QLineEdit(m_findDialog);
-  findInputLayout->addWidget(new QLabel(tr("Find:")));
-  findInputLayout->addWidget(m_findLineEdit);
-  findLayout->addLayout(findInputLayout);
+        QHBoxLayout *findInputLayout = new QHBoxLayout;
+        m_findLineEdit = new QLineEdit(m_findDialog);
+        findInputLayout->addWidget(new QLabel(tr("Find:")));
+        findInputLayout->addWidget(m_findLineEdit);
+        findLayout->addLayout(findInputLayout);
 
-  QHBoxLayout *findOptionsLayout = new QHBoxLayout;
-  m_caseSensitiveCheckBox = new QCheckBox(tr("Case Sensitive"), m_findDialog);
-  m_wholeWordsCheckBox = new QCheckBox(tr("Whole Words"), m_findDialog);
-  m_regexCheckBox = new QCheckBox(tr("Regular Expression"), m_findDialog);
-  findOptionsLayout->addWidget(m_caseSensitiveCheckBox);
-  findOptionsLayout->addWidget(m_wholeWordsCheckBox);
-  findOptionsLayout->addWidget(m_regexCheckBox);
-  findLayout->addLayout(findOptionsLayout);
+        QHBoxLayout *findOptionsLayout = new QHBoxLayout;
+        m_caseSensitiveCheckBox = new QCheckBox(tr("Case Sensitive"), m_findDialog);
+        m_wholeWordsCheckBox = new QCheckBox(tr("Whole Words"), m_findDialog);
+        m_regexCheckBox = new QCheckBox(tr("Regular Expression"), m_findDialog);
+        findOptionsLayout->addWidget(m_caseSensitiveCheckBox);
+        findOptionsLayout->addWidget(m_wholeWordsCheckBox);
+        findOptionsLayout->addWidget(m_regexCheckBox);
+        findLayout->addLayout(findOptionsLayout);
 
-  QHBoxLayout *findButtonLayout = new QHBoxLayout;
-  m_findNextButton = new QPushButton(tr("Find Next"), m_findDialog);
-  m_findPrevButton = new QPushButton(tr("Find Previous"), m_findDialog);
-  QPushButton *findCloseButton = new QPushButton(tr("Close"), m_findDialog);
-  findButtonLayout->addWidget(m_findNextButton);
-  findButtonLayout->addWidget(m_findPrevButton);
-  findButtonLayout->addWidget(findCloseButton);
-  findLayout->addLayout(findButtonLayout);
+        QHBoxLayout *findButtonLayout = new QHBoxLayout;
+        m_findNextButton = new QPushButton(tr("Find Next"), m_findDialog);
+        m_findPrevButton = new QPushButton(tr("Find Previous"), m_findDialog);
+        QPushButton *findCloseButton = new QPushButton(tr("Close"), m_findDialog);
+        findButtonLayout->addWidget(m_findNextButton);
+        findButtonLayout->addWidget(m_findPrevButton);
+        findButtonLayout->addWidget(findCloseButton);
+        findLayout->addLayout(findButtonLayout);
 
-  connect(m_findNextButton, &QPushButton::clicked, this, &CodeEditor::find);
-  connect(m_findPrevButton, &QPushButton::clicked, this, [this]() {
-    m_searchFlags |= QTextDocument::FindBackward;
-    find();
-  });
-  connect(findCloseButton, &QPushButton::clicked, m_findDialog, &QDialog::hide);
-  connect(m_findLineEdit, &QLineEdit::textChanged, this,
-          &CodeEditor::updateSearchHighlight);
+        // Set up shortcuts
+        QShortcut *findShortcut = new QShortcut(QKeySequence::Find, this);
+        connect(findShortcut, &QShortcut::activated, this, &CodeEditor::showFindDialog);
 
-  // Replace Dialog
-  m_replaceDialog = new QDialog(this);
-  m_replaceDialog->setWindowTitle(tr("Replace"));
-  QVBoxLayout *replaceLayout = new QVBoxLayout(m_replaceDialog);
+        QShortcut *findNextShortcut = new QShortcut(QKeySequence(Qt::Key_F3), this);
+        connect(findNextShortcut, &QShortcut::activated, this, &CodeEditor::findNext);
 
-  QHBoxLayout *replaceInputLayout = new QHBoxLayout;
-  m_replaceLineEdit = new QLineEdit(m_replaceDialog);
-  replaceInputLayout->addWidget(new QLabel(tr("Replace with:")));
-  replaceInputLayout->addWidget(m_replaceLineEdit);
-  replaceLayout->addLayout(replaceInputLayout);
+        QShortcut *findPrevShortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F3), this);
+        connect(findPrevShortcut, &QShortcut::activated, this, &CodeEditor::findPrevious);
 
-  QHBoxLayout *replaceButtonLayout = new QHBoxLayout;
-  m_replaceButton = new QPushButton(tr("Replace"), m_replaceDialog);
-  m_replaceAllButton = new QPushButton(tr("Replace All"), m_replaceDialog);
-  QPushButton *replaceCloseButton =
-      new QPushButton(tr("Close"), m_replaceDialog);
-  replaceButtonLayout->addWidget(m_replaceButton);
-  replaceButtonLayout->addWidget(m_replaceAllButton);
-  replaceButtonLayout->addWidget(replaceCloseButton);
-  replaceLayout->addLayout(replaceButtonLayout);
+        // Connect dialog buttons
+        connect(m_findNextButton, &QPushButton::clicked, this, &CodeEditor::find);
+        connect(m_findPrevButton, &QPushButton::clicked, this, [this]() {
+            m_searchFlags |= QTextDocument::FindBackward;
+            find();
+        });
+        connect(findCloseButton, &QPushButton::clicked, m_findDialog, &QDialog::hide);
+        connect(m_findLineEdit, &QLineEdit::textChanged, this, &CodeEditor::updateSearchHighlight);
+    }
 
-  connect(m_replaceButton, &QPushButton::clicked, this, &CodeEditor::replace);
-  connect(m_replaceAllButton, &QPushButton::clicked, this,
-          &CodeEditor::replaceAll);
-  connect(replaceCloseButton, &QPushButton::clicked, m_replaceDialog,
-          &QDialog::hide);
+    // Replace Dialog
+    m_replaceDialog = new QDialog(this);
+    m_replaceDialog->setWindowTitle(tr("Replace"));
+    QVBoxLayout *replaceLayout = new QVBoxLayout(m_replaceDialog);
+
+    QHBoxLayout *replaceInputLayout = new QHBoxLayout;
+    m_replaceLineEdit = new QLineEdit(m_replaceDialog);
+    replaceInputLayout->addWidget(new QLabel(tr("Replace with:")));
+    replaceInputLayout->addWidget(m_replaceLineEdit);
+    replaceLayout->addLayout(replaceInputLayout);
+
+    QHBoxLayout *replaceButtonLayout = new QHBoxLayout;
+    m_replaceButton = new QPushButton(tr("Replace"), m_replaceDialog);
+    m_replaceAllButton = new QPushButton(tr("Replace All"), m_replaceDialog);
+    QPushButton *replaceCloseButton =
+        new QPushButton(tr("Close"), m_replaceDialog);
+    replaceButtonLayout->addWidget(m_replaceButton);
+    replaceButtonLayout->addWidget(m_replaceAllButton);
+    replaceButtonLayout->addWidget(replaceCloseButton);
+    replaceLayout->addLayout(replaceButtonLayout);
+
+    connect(m_replaceButton, &QPushButton::clicked, this, &CodeEditor::replace);
+    connect(m_replaceAllButton, &QPushButton::clicked, this,
+            &CodeEditor::replaceAll);
+    connect(replaceCloseButton, &QPushButton::clicked, m_replaceDialog,
+            &QDialog::hide);
 }
 
 void CodeEditor::showFindDialog() {
-  m_findDialog->show();
-  m_findLineEdit->setFocus();
-  m_findLineEdit->selectAll();
+    if (!m_findDialog) {
+        setupSearchDialogs();
+    }
+    m_findDialog->show();
+    m_findDialog->raise();  // Bring to front
+    m_findDialog->activateWindow();  // Give keyboard focus
+    m_findLineEdit->setFocus();
+    m_findLineEdit->selectAll();
 }
 
 void CodeEditor::showReplaceDialog() {
@@ -1580,7 +1455,6 @@ void CodeEditor::handleDiagnosticsReceived(const QString &uri, const QJsonArray 
     selection.format = format;
     selections.append(selection);
   }
-
   m_editor->setExtraSelections(selections);
 }
 
@@ -2062,3 +1936,4 @@ QTextBlock CodeEditor::blockAtPosition(int y) const {
 }
 
 #include "moc_codeeditor.cpp"
+

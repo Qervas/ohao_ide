@@ -622,21 +622,12 @@ void MainWindow::openFolder() {
 }
 
 void MainWindow::loadFile(const QString &filePath) {
-  QFileInfo fileInfo(filePath);
-
-  // Hide welcome view if it's still showing
-  if (centralWidget() == welcomeView) {
-    welcomeView->setParent(nullptr);
-    setCentralWidget(editorTabs);
-  }
-
   // Show project tree
   dockManager->setDockVisible(DockManager::DockWidgetType::ProjectTree, true);
 
   // Check if file is already open
   for (int i = 0; i < editorTabs->count(); ++i) {
-    if (CodeEditor *editor =
-            qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
+    if (CodeEditor *editor = qobject_cast<CodeEditor *>(editorTabs->widget(i))) {
       if (editor->property("filePath").toString() == filePath) {
         editorTabs->setCurrentIndex(i);
         return;
@@ -657,22 +648,25 @@ void MainWindow::loadFile(const QString &filePath) {
   // Load as text file
   QFile file(filePath);
   if (!file.open(QFile::ReadOnly | QFile::Text)) {
-    QMessageBox::warning(
-        this, tr("Application"),
-        tr("Cannot read file %1:\n%2.")
-            .arg(QDir::toNativeSeparators(filePath), file.errorString()));
+    QMessageBox::warning(this, tr("Error"),
+                        tr("Cannot open file %1:\n%2.")
+                            .arg(filePath)
+                            .arg(file.errorString()));
     return;
   }
 
-  QTextStream in(&file);
+  // Create new editor tab without dock
   CodeEditor *editor = new CodeEditor(this);
-  editor->setPlainText(in.readAll());
   editor->setProperty("filePath", filePath);
-
-  int index = editorTabs->addTab(editor, fileInfo.fileName());
-  editorTabs->setCurrentIndex(index);
-
-  statusBar()->showMessage(tr("File loaded"), 2000);
+  editor->setWorkingDirectory(QFileInfo(filePath).absolutePath());
+  
+  QTextStream in(&file);
+  editor->setPlainText(in.readAll());
+  
+  QString fileName = QFileInfo(filePath).fileName();
+  editorTabs->addTab(editor, fileName);
+  editorTabs->setCurrentWidget(editor);
+  editor->setFocus();
 }
 
 bool MainWindow::saveFile() {

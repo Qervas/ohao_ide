@@ -4,7 +4,7 @@
 #include <QInputDialog>
 #include <QMenu>
 #include "projecttree.h"
-#include "codeeditor.h"
+#include "codeeditor/codeeditor.h"
 #include "contentview.h"
 #include "terminal.h"
 #include "dockmanager.h"

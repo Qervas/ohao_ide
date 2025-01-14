@@ -1,4 +1,5 @@
 #include "cpphighlighter.h"
+#include <utility> 
 
 CppHighlighter::CppHighlighter(QTextDocument *parent)
     : BaseHighlighter(parent) {
@@ -119,7 +120,7 @@ void CppHighlighter::setupRules() {
 
 void CppHighlighter::doHighlightBlock(const QString &text) {
     // Apply regular highlighting rules
-    for (const HighlightingRule &rule : qAsConst(highlightingRules)) {
+    for (const HighlightingRule &rule : std::as_const(highlightingRules)) {
         QRegularExpressionMatchIterator matchIterator = rule.pattern.globalMatch(text);
         while (matchIterator.hasNext()) {
             QRegularExpressionMatch match = matchIterator.next();

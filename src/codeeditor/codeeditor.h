@@ -1,7 +1,9 @@
 #pragma once
-#include "highlighters/basehighlighter.h"
+#include "../highlighters/basehighlighter.h"
 #include "dockwidgetbase.h"
 #include "lsp/lspclient.h"
+#include "linenumberarea.h"
+#include "customtextedit.h"
 #include <QMap>
 #include <QPlainTextEdit>
 #include <QVBoxLayout>
@@ -9,7 +11,6 @@
 #include <QWidget>
 
 // Forward declarations
-class LineNumberArea;
 class QDialog;
 class QLineEdit;
 class QCheckBox;
@@ -40,23 +41,6 @@ public:
 
   BracketNode(const BracketPair &p)
       : pair(p), height(1), left(nullptr), right(nullptr) {}
-};
-
-// Custom editor class to access protected members
-class CustomPlainTextEdit : public QPlainTextEdit {
-  Q_OBJECT
-public:
-  explicit CustomPlainTextEdit(QWidget *parent = nullptr);
-  ~CustomPlainTextEdit();
-
-protected:
-  void keyPressEvent(QKeyEvent *e) override;
-  void mousePressEvent(QMouseEvent *e) override;
-  void mouseMoveEvent(QMouseEvent *e) override;
-  friend class CodeEditor;
-
-private:
-  QTimer *m_hoverTimer;
 };
 
 class CodeEditor : public DockWidgetBase {
@@ -243,30 +227,4 @@ private:
 
   friend class LineNumberArea;
   friend class CustomPlainTextEdit;
-};
-
-// Line number area widget
-class LineNumberArea : public QWidget {
-  Q_OBJECT
-public:
-  explicit LineNumberArea(CodeEditor *editor) : QWidget(editor), codeEditor(editor) {}
-  QSize sizeHint() const override {
-    return QSize(codeEditor->lineNumberAreaWidth(), 0);
-  }
-
-signals:
-  void mousePressed(QPoint pos);
-
-protected:
-  void paintEvent(QPaintEvent *event) override {
-    codeEditor->lineNumberAreaPaintEvent(event);
-  }
-
-  void mousePressEvent(QMouseEvent *event) override {
-    emit mousePressed(event->pos());
-    QWidget::mousePressEvent(event);
-  }
-
-private:
-  CodeEditor *codeEditor;
 };

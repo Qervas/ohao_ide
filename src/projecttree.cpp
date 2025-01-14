@@ -382,24 +382,31 @@ void ProjectTree::setupFileWatcher() {
 
 void ProjectTree::watchDirectory(const QString &path) {
     if (path.isEmpty()) return;
-
-    // Remove old watches
-    if (!fsWatcher->directories().isEmpty()) {
-        fsWatcher->removePaths(fsWatcher->directories());
+    
+    QStringList currentDirs = fsWatcher->directories();
+    QStringList currentFiles = fsWatcher->files();
+    
+    // Remove paths that are no longer needed
+    QStringList dirsToRemove;
+    for (const QString &dir : currentDirs) {
+        if (!dir.startsWith(path)) {
+            dirsToRemove << dir;
+        }
     }
-    if (!fsWatcher->files().isEmpty()) {
-        fsWatcher->removePaths(fsWatcher->files());
-    }
-
-    // Add new watch for the directory
-    fsWatcher->addPath(path);
-
-    // Watch all subdirectories
-    QDir dir(path);
+    
+    if (!dirsToRemove.isEmpty())
+        fsWatcher->removePaths(dirsToRemove);
+        
+    // Add new path if not already watched
+    if (!currentDirs.contains(path))
+        fsWatcher->addPath(path);
+        
+    // Watch subdirectories
     QDirIterator it(path, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         QString subDir = it.next();
-        fsWatcher->addPath(subDir);
+        if (!currentDirs.contains(subDir))
+            fsWatcher->addPath(subDir);
     }
 }
 
