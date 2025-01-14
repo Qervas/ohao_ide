@@ -1,11 +1,12 @@
 #pragma once
 #include "../highlighters/basehighlighter.h"
 #include "codeeditor/bracketmatching.h"
+#include "codeeditor/folding.h"
 #include "codeeditor/quotematching.h"
 #include "customtextedit.h"
-#include "dockwidgetbase.h"
 #include "linenumberarea.h"
 #include "lsp/lspclient.h"
+#include "views/dockwidgetbase.h"
 #include <QMap>
 #include <QPlainTextEdit>
 #include <QVBoxLayout>
@@ -129,6 +130,7 @@ private:
   QDialog *m_replaceDialog;
   BracketMatcher m_bracketMatcher;
   QuoteMatcher m_quoteMatcher;
+  CodeFolding m_folding;
 
   // LSP
   LSPClient *m_lspClient;
@@ -155,8 +157,6 @@ private:
   QWidget *viewport() const { return m_editor->viewport(); }
 
   // Code folding members
-  QMap<int, bool> m_foldedBlocks; // Maps block number to folded state
-  QMap<int, int> m_foldingRanges; // Maps start block to end block
   QMap<int, bool>
       m_hoveredFoldMarkers; // Tracks which fold markers are being hovered
   void updateFoldingRanges();

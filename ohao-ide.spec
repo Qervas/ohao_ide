@@ -36,7 +36,7 @@ cat > %{name}.desktop << EOF
 [Desktop Entry]
 Name=Ohao IDE
 Comment=Modern C++ IDE
-Exec=ohao_IDE
+Exec=ohao-ide
 Icon=text-editor
 Terminal=false
 Type=Application
@@ -55,11 +55,11 @@ mkdir -p %{buildroot}%{_datadir}/applications
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{name}.desktop
 
 %files
-%{_bindir}/ohao_IDE
-%{_datadir}/doc/ohao_IDE/LICENSE
-%{_datadir}/doc/ohao_IDE/README.md
+%{_bindir}/ohao-ide
+%{_datadir}/doc/ohao-ide/LICENSE
+%{_datadir}/doc/ohao-ide/README.md
 %{_datadir}/applications/%{name}.desktop
-%{_datadir}/ohao_IDE/resources.qrc
+%{_datadir}/ohao-ide/resources.qrc
 %license LICENSE
 
 %changelog
